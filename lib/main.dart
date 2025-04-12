@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 
 void main() => runApp(DrawingApp());
 
@@ -36,7 +37,16 @@ class _DrawingPageState extends State<DrawingPage> {
                   points.add(localPosition);
                 });
               },
-              onPanEnd: (_) => points.add(null),
+              onPanEnd: (_) {
+                points.add(null);
+
+                final jsonPoints = points.map((p){
+                  if(p == null) return null;
+                  return {"x": p.dx, "y":p.dy, "t":DateTime.now().millisecondsSinceEpoch};
+                }).toList();
+
+                jsonEncode(jsonPoints).split(',').forEach(print);
+              },
               child: CustomPaint(
                 painter: MyPainter(points),
                 size: Size.infinite,
