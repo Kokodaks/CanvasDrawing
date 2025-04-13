@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
 
 void main() => runApp(DrawingApp());
 
@@ -16,8 +17,13 @@ class DrawingPage extends StatefulWidget {
   _DrawingPageState createState() => _DrawingPageState();
 }
 
+
 class _DrawingPageState extends State<DrawingPage> {
-  List<Offset?> points = [];
+  List<Map<String, dynamic>> currentStrokePoints = [];
+  List<Map<String, dynamic>> allStrokes = [];
+  int strokeStartTime = 0;
+  int strokeOrder = 0;
+  int startTime = DateTime.now().millisecondsSinceEpoch;
 
   @override
   Widget build(BuildContext context) {
@@ -30,15 +36,53 @@ class _DrawingPageState extends State<DrawingPage> {
             height: constraints.maxHeight,
             child: GestureDetector(
               onPanUpdate: (details) {
+                final RenderBox renderBox = context.findRenderObject() as RenderBox;
+                final localPosition = renderBox.globalToLocal(details.globalPosition);
+
+                if(currentStrokePoints.isEmpty){
+                  strokeStartTime = DateTime.now().millisecondsSinceEpoch;
+                }
+
+                final currentTime = DateTime.now().millisecondsSinceEpoch;
+                final relativeT = currentTime - strokeStartTime;
+
                 setState(() {
-                  final RenderBox renderBox = context.findRenderObject() as RenderBox;
-                  final localPosition = renderBox.globalToLocal(details.globalPosition);
-                  points.add(localPosition);
+                  currentStrokePoints.add({
+                    "x": localPosition.dx,
+                    "y": localPosition.dy,
+                    "t": relativeT,
+                  });
                 });
               },
-              onPanEnd: (_) => points.add(null),
+              onPanEnd: (_) {
+                final strokeJson = {
+                  "strokeOrder": strokeOrder,
+                  "timestamp": strokeStartTime - startTime,
+                  "color": "#000000",
+                  "strokeWidth":4,
+                  "points": List<Map<String, dynamic>>.from(currentStrokePoints)
+                };
+
+                setState((){
+                  allStrokes.add(strokeJson);
+                  currentStrokePoints.clear();
+                  strokeOrder++;
+                });
+
+                print(jsonEncode(strokeJson));
+              },
               child: CustomPaint(
-                painter: MyPainter(points),
+                painter: MyPainter(
+                  [
+                    ...allStrokes.map((stroke) =>
+                      (stroke['points'] as List).map<Offset>(
+                          (p) => Offset(p['x'], p['y'])
+                      ).toList()
+                    ),
+                    if(currentStrokePoints.isNotEmpty)
+                      ...[currentStrokePoints.map((p) => Offset(p['x'], p['y'])).toList()]
+                  ]
+                ),
                 size: Size.infinite,
               ),
             ),
@@ -47,11 +91,12 @@ class _DrawingPageState extends State<DrawingPage> {
       ),
     );
   }
+
 }
 
 class MyPainter extends CustomPainter {
-  final List<Offset?> points;
-  MyPainter(this.points);
+  final List<List<Offset>> strokes;
+  MyPainter(this.strokes);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -60,9 +105,10 @@ class MyPainter extends CustomPainter {
       ..strokeWidth = 4.0
       ..strokeCap = StrokeCap.round;
 
-    for (int i = 0; i < points.length - 1; i++) {
-      if (points[i] != null && points[i + 1] != null)
-        canvas.drawLine(points[i]!, points[i + 1]!, paint);
+    for (var stroke in strokes) {
+      for (int i = 0; i < stroke.length - 1; i++) {
+        canvas.drawLine(stroke[i], stroke[i + 1], paint);
+      }
     }
   }
 
