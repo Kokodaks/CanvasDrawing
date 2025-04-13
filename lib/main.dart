@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
+import 'api.dart';
 
-void main() => runApp(DrawingApp());
+Future<void> main() async{
+  await dotenv.load();
+  runApp(DrawingApp());
+  //실기기와 백엔드 (컴퓨터 로컬 포트 실행) 테스트
+  // runApp(ApiTestApp());
+}
 
 class DrawingApp extends StatelessWidget {
   @override
@@ -89,9 +97,34 @@ class _DrawingPageState extends State<DrawingPage> {
           );
         },
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          final response = await sendAllStrokes(allStrokes);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response)),
+          );
+        },
+        child: Icon(Icons.send),
+      ),
     );
   }
 
+  Future<String> sendAllStrokes(List<Map<String, dynamic>> strokes) async{
+    final url = Uri.parse('${dotenv.env['IP_ADDR']}/upload');
+    final headers = {'Content-Type': 'application/json'};
+    try{
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode({"strokes": strokes}),
+      );
+      return response.statusCode == 200
+          ? '서버 전송 성공!'
+          : '서버 오류: {$response.statusCode}';
+    }catch(e){
+      return '전송 실패: $e';
+    }
+  }
 }
 
 class MyPainter extends CustomPainter {
