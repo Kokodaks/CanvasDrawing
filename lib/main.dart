@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'api.dart';
 
-void main() => runApp(DrawingApp());
+//실기기와 백엔드 (컴퓨터 로컬 포트 실행) 테스트
+Future<void> main() async{
+  await dotenv.load();
+  runApp(ApiTestApp());
+}
+
+// void main() => runApp(DrawingApp());
 
 class DrawingApp extends StatelessWidget {
   @override
