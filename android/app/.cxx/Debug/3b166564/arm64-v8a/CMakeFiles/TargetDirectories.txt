@@ -1,0 +1,2 @@
+/Users/easywater/Desktop/CanvasDrawing/android/app/.cxx/Debug/3b166564/arm64-v8a/CMakeFiles/rebuild_cache.dir
+/Users/easywater/Desktop/CanvasDrawing/android/app/.cxx/Debug/3b166564/arm64-v8a/CMakeFiles/edit_cache.dir
