@@ -34,7 +34,7 @@ class _TestFirstPageState extends State<TestFirstPage> {
         title: const Text("사용자 정보 입력"),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
-        elevation: 1,
+        elevation: 0,
         centerTitle: true,
       ),
       body: Padding(
