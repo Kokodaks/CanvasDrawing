@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../question/person_question_page.dart';
+import '../question/person_question_page.dart'; // 이건 네가 직접 만든 페이지라 유지
 import 'dart:math';
 
 class PersonDrawingPage extends StatefulWidget {
@@ -107,17 +107,16 @@ class _PersonDrawingPageState extends State<PersonDrawingPage> {
                   color: isErasing ? Colors.red : Colors.grey,
                   onPressed: () => setState(() => isErasing = true),
                 ),
-                const SizedBox(width: 4),
-                const Text("지우개 크기:"),
-                SizedBox(
-                  width: 100,
+                const SizedBox(width: 10),
+                const Text("펜 두께:"),
+                Expanded(
                   child: Slider(
-                    value: eraserSize,
-                    min: 5,
-                    max: 30,
-                    onChanged: (value) => setState(() => eraserSize = value),
+                    value: fixedBrushSize,
+                    min: 2,
+                    max: 50,
+                    onChanged: (value) => setState(() => fixedBrushSize = value),
                   ),
-                )
+                ),
               ],
             ),
           ),

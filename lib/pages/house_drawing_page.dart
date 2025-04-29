@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import '../question/house_question_page.dart';
-import 'dart:math';
 
 class HouseDrawingPage extends StatefulWidget {
   @override
@@ -11,12 +15,21 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   List<List<StrokePoint>> strokes = [];
   List<StrokePoint> currentStroke = [];
 
-  double fixedBrushSize = 4.0;
+  double fixedBrushSize = 10.0;
   double eraserSize = 10.0;
   bool isErasing = false;
   Color selectedColor = Colors.black;
 
+  GlobalKey _repaintKey = GlobalKey();
+  GlobalKey _canvasKey = GlobalKey();
+  Timer? _debounceTimer;
+
+  double _accumulatedArea = 0;
+  bool _modeJustChanged = false; // 모드 변경 직후 플래그
+
+  // --- 그리기 시작 ---
   void startNewStroke(Offset position) {
+    if (!_isInCanvas(position)) return;
     currentStroke = [
       StrokePoint(
         offset: position,
@@ -24,9 +37,17 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
         strokeWidth: fixedBrushSize,
       )
     ];
+    if (_modeJustChanged && !isErasing) {
+      // 펜 모드로 전환 후 첫 획 그릴 때
+      _takeScreenshotDirectly();
+      _modeJustChanged = false;
+    }
+    _restartDebounceTimer();
   }
 
+  // --- 그리는 중 ---
   void addPointToStroke(Offset position) {
+    if (!_isInCanvas(position)) return;
     currentStroke.add(
       StrokePoint(
         offset: position,
@@ -34,8 +55,12 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
         strokeWidth: fixedBrushSize,
       ),
     );
+    _accumulateArea();
+    _handleAreaBasedCapture();
+    _restartDebounceTimer();
   }
 
+  // --- 그리기 끝 ---
   void endStroke() {
     if (currentStroke.isNotEmpty) {
       strokes.add(currentStroke);
@@ -43,7 +68,14 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     }
   }
 
+  // --- 지우기 ---
   void eraseStrokeAt(Offset tapPosition) {
+    if (!_isInCanvas(tapPosition)) return;
+    if (_modeJustChanged && isErasing) {
+      // 지우개 모드로 전환 후 첫 지우기
+      _takeScreenshotDirectly();
+      _modeJustChanged = false;
+    }
     setState(() {
       strokes.removeWhere((stroke) {
         return stroke.any((point) =>
@@ -51,12 +83,76 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
             (point.offset! - tapPosition).distance <= eraserSize);
       });
     });
+    _restartDebounceTimer();
+  }
+
+  // --- 캔버스 안 체크 ---
+  bool _isInCanvas(Offset position) {
+    final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return false;
+    final localPosition = renderBox.globalToLocal(position);
+    return localPosition.dx >= 0 &&
+        localPosition.dy >= 0 &&
+        localPosition.dx <= renderBox.size.width &&
+        localPosition.dy <= renderBox.size.height;
+  }
+
+  // --- 디바운싱 타이머 재시작 ---
+  void _restartDebounceTimer() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(seconds: 5), () async {
+      if (mounted) {
+        if (strokes.isNotEmpty || currentStroke.isNotEmpty) {
+          await _takeScreenshotDirectly();
+        }
+      }
+    });
+  }
+
+  // --- 누적 면적 초과 캡처 ---
+  void _handleAreaBasedCapture() {
+    if (_accumulatedArea > 50000) {
+      _takeScreenshotDirectly();
+      _accumulatedArea = 0;
+    }
+  }
+
+  // --- 그릴 때마다 면적 누적 ---
+  void _accumulateArea() {
+    _accumulatedArea += fixedBrushSize * fixedBrushSize;
+  }
+
+  // --- 스크린샷 찍기 (바로 찍음) ---
+  Future<void> _takeScreenshotDirectly() async {
+    try {
+      RenderRepaintBoundary boundary =
+      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      var image = await boundary.toImage(pixelRatio: 3.0);
+      ByteData? byteData = await image.toByteData(format: ImageByteFormat.png);
+      Uint8List pngBytes = byteData!.buffer.asUint8List();
+
+      final directory = Directory('/storage/emulated/0/Download');
+      final path = '${directory.path}/capture_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File(path);
+      await file.writeAsBytes(pngBytes);
+
+      print('🖼️ 스크린샷 저장 완료: $path');
+    } catch (e) {
+      print('스크린샷 실패: $e');
+    }
   }
 
   @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  // --- 화면 구성 ---
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF),
+      backgroundColor: Colors.white,
       body: Column(
         children: [
           const SizedBox(height: 20),
@@ -67,139 +163,125 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
             ),
           ),
           const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+          _buildToolbar(),
+          Expanded(
             child: Container(
-              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.all(12),
               decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade400),
                 color: Colors.white,
-                border: Border.all(color: Colors.grey.shade300),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
-                  InstructionItem("1. 색상 선택하기", "색상 선택 도구를 원하는 색으로 바꿀 수 있어요"),
-                  InstructionItem("2. 선 굵기 조절하기", "슬라이더를 이용해서 선의 굵기를 조절하세요"),
-                  InstructionItem("3. 지우개 사용하기", "지우개 도구를 사용해 실수한 부분을 지워보세요"),
-                  InstructionItem("4. 완료하기", "그림이 다 끝나면 '다음' 버튼을 눌러주세요"),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                const Text("펜: ", style: TextStyle(fontSize: 16)),
-                IconButton(
-                  icon: const Icon(Icons.create),
-                  tooltip: "펜",
-                  color: !isErasing ? Colors.black : Colors.grey,
-                  onPressed: () => setState(() => isErasing = false),
-                ),
-                const SizedBox(width: 20),
-                const Text("지우개: "),
-                IconButton(
-                  icon: const Icon(Icons.auto_fix_off),
-                  tooltip: "지우개",
-                  color: isErasing ? Colors.red : Colors.grey,
-                  onPressed: () => setState(() => isErasing = true),
-                ),
-                const SizedBox(width: 4),
-                const Text("지우개 크기:"),
-                SizedBox(
-                  width: 100,
-                  child: Slider(
-                    value: eraserSize,
-                    min: 5,
-                    max: 30,
-                    onChanged: (value) => setState(() => eraserSize = value),
-                  ),
-                )
-              ],
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onPanStart: (details) {
-                final position = details.localPosition;
-                if (isErasing) {
-                  eraseStrokeAt(position);
-                } else {
-                  setState(() => startNewStroke(position));
-                }
-              },
-              onPanUpdate: (details) {
-                final position = details.localPosition;
-                if (!isErasing) {
-                  setState(() => addPointToStroke(position));
-                }
-              },
-              onPanEnd: (_) {
-                if (!isErasing) {
-                  setState(() => endStroke());
-                }
-              },
-              child: Container(
-                margin: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade400),
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
+              clipBehavior: Clip.hardEdge,
+              child: RepaintBoundary(
+                key: _repaintKey,
+                child: GestureDetector(
+                  onPanStart: (details) {
+                    final position = details.localPosition;
+                    if (isErasing) {
+                      eraseStrokeAt(position);
+                    } else {
+                      setState(() => startNewStroke(position));
+                    }
+                  },
+                  onPanUpdate: (details) {
+                    final position = details.localPosition;
+                    if (!isErasing) {
+                      setState(() => addPointToStroke(position));
+                    }
+                  },
+                  onPanEnd: (_) {
+                    if (!isErasing) {
+                      setState(() => endStroke());
+                    }
+                  },
                   child: CustomPaint(
                     painter: StrokePainter(strokes, currentStroke),
                     size: Size.infinite,
+                    child: Container(
+                      key: _canvasKey,
+                      color: Colors.transparent,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => HouseQuestionPage()),
-                );
-              },
-              child: const Text("다음으로 넘어가기 →", style: TextStyle(fontSize: 18)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFA726),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 48),
-              ),
+          _buildNextButton(),
+        ],
+      ),
+    );
+  }
+
+  // --- 툴바 ---
+  Widget _buildToolbar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          const Text("펜: ", style: TextStyle(fontSize: 16)),
+          IconButton(
+            icon: const Icon(Icons.create),
+            tooltip: "펜",
+            color: !isErasing ? Colors.black : Colors.grey,
+            onPressed: () {
+              setState(() {
+                isErasing = false;
+                _modeJustChanged = true;
+              });
+            },
+          ),
+          const SizedBox(width: 20),
+          const Text("지우개: "),
+          IconButton(
+            icon: const Icon(Icons.auto_fix_off),
+            tooltip: "지우개",
+            color: isErasing ? Colors.red : Colors.grey,
+            onPressed: () {
+              setState(() {
+                isErasing = true;
+                _modeJustChanged = true;
+              });
+            },
+          ),
+          const SizedBox(width: 10),
+          const Text("펜 두께:"),
+          Expanded(
+            child: Slider(
+              value: fixedBrushSize,
+              min: 2,
+              max: 50,
+              onChanged: (value) => setState(() => fixedBrushSize = value),
             ),
           ),
         ],
       ),
     );
   }
-}
 
-class InstructionItem extends StatelessWidget {
-  final String title;
-  final String description;
-  const InstructionItem(this.title, this.description);
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          Text(description, style: const TextStyle(fontSize: 11), textAlign: TextAlign.center),
-        ],
+  // --- 다음 버튼 ---
+  Widget _buildNextButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
+      child: ElevatedButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => HouseQuestionPage()),
+          );
+        },
+        child: const Text("다음으로 넘어가기 →", style: TextStyle(fontSize: 18)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFFFFA726),
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 48),
+        ),
       ),
     );
   }
 }
 
+// --- 작은 클래스들 ---
 class StrokePoint {
   final Offset? offset;
   final Color color;
