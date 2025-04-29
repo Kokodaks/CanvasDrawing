@@ -25,9 +25,8 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   Timer? _debounceTimer;
 
   double _accumulatedArea = 0;
-  bool _modeJustChanged = false; // 모드 변경 직후 플래그
+  bool _modeJustChanged = false;
 
-  // --- 그리기 시작 ---
   void startNewStroke(Offset position) {
     if (!_isInCanvas(position)) return;
     currentStroke = [
@@ -38,14 +37,12 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       )
     ];
     if (_modeJustChanged && !isErasing) {
-      // 펜 모드로 전환 후 첫 획 그릴 때
       _takeScreenshotDirectly();
       _modeJustChanged = false;
     }
     _restartDebounceTimer();
   }
 
-  // --- 그리는 중 ---
   void addPointToStroke(Offset position) {
     if (!_isInCanvas(position)) return;
     currentStroke.add(
@@ -60,7 +57,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     _restartDebounceTimer();
   }
 
-  // --- 그리기 끝 ---
   void endStroke() {
     if (currentStroke.isNotEmpty) {
       strokes.add(currentStroke);
@@ -68,14 +64,11 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     }
   }
 
-  // --- 지우기 ---
   void eraseStrokeAt(Offset tapPosition) {
     if (!_isInCanvas(tapPosition)) return;
-    if (_modeJustChanged && isErasing) {
-      // 지우개 모드로 전환 후 첫 지우기
-      _takeScreenshotDirectly();
-      _modeJustChanged = false;
-    }
+
+    int beforeCount = strokes.length;
+
     setState(() {
       strokes.removeWhere((stroke) {
         return stroke.any((point) =>
@@ -83,10 +76,17 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
             (point.offset! - tapPosition).distance <= eraserSize);
       });
     });
+
+    int afterCount = strokes.length;
+
+    if (_modeJustChanged && isErasing && beforeCount > afterCount) {
+      _takeScreenshotDirectly();
+      _modeJustChanged = false;
+    }
+
     _restartDebounceTimer();
   }
 
-  // --- 캔버스 안 체크 ---
   bool _isInCanvas(Offset position) {
     final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return false;
@@ -97,7 +97,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
         localPosition.dy <= renderBox.size.height;
   }
 
-  // --- 디바운싱 타이머 재시작 ---
   void _restartDebounceTimer() {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(seconds: 5), () async {
@@ -109,7 +108,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     });
   }
 
-  // --- 누적 면적 초과 캡처 ---
   void _handleAreaBasedCapture() {
     if (_accumulatedArea > 50000) {
       _takeScreenshotDirectly();
@@ -117,12 +115,10 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     }
   }
 
-  // --- 그릴 때마다 면적 누적 ---
   void _accumulateArea() {
     _accumulatedArea += fixedBrushSize * fixedBrushSize;
   }
 
-  // --- 스크린샷 찍기 (바로 찍음) ---
   Future<void> _takeScreenshotDirectly() async {
     try {
       RenderRepaintBoundary boundary =
@@ -148,7 +144,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     super.dispose();
   }
 
-  // --- 화면 구성 ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -213,7 +208,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     );
   }
 
-  // --- 툴바 ---
   Widget _buildToolbar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -259,7 +253,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     );
   }
 
-  // --- 다음 버튼 ---
   Widget _buildNextButton() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
@@ -281,7 +274,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   }
 }
 
-// --- 작은 클래스들 ---
 class StrokePoint {
   final Offset? offset;
   final Color color;
