@@ -21,12 +21,14 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   Color selectedColor = Colors.black;
 
   GlobalKey _repaintKey = GlobalKey();
+  GlobalKey _canvasKey = GlobalKey();
   Timer? _debounceTimer;
 
   double _accumulatedArea = 0;
   bool _modeJustChanged = false;
 
   void startNewStroke(Offset position) {
+    if (!_isInCanvas(position)) return;
     currentStroke = [
       StrokePoint(
         offset: position,
@@ -42,6 +44,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   }
 
   void addPointToStroke(Offset position) {
+    if (!_isInCanvas(position)) return;
     currentStroke.add(
       StrokePoint(
         offset: position,
@@ -62,6 +65,8 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   }
 
   void eraseStrokeAt(Offset tapPosition) {
+    if (!_isInCanvas(tapPosition)) return;
+
     int beforeCount = strokes.length;
 
     setState(() {
@@ -80,6 +85,17 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     }
 
     _restartDebounceTimer();
+  }
+
+  bool _isInCanvas(Offset position) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return false;
+    final localPosition = renderBox.globalToLocal(position);
+    return localPosition.dx >= 0 &&
+        localPosition.dy >= 0 &&
+        localPosition.dx <= renderBox.size.width &&
+        localPosition.dy <= renderBox.size.height;
   }
 
   void _restartDebounceTimer() {
@@ -106,8 +122,8 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
   Future<void> _takeScreenshotDirectly() async {
     try {
-      RenderRepaintBoundary boundary = _repaintKey.currentContext!
-          .findRenderObject() as RenderRepaintBoundary;
+      RenderRepaintBoundary boundary =
+      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       var image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
@@ -160,30 +176,35 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                   clipBehavior: Clip.hardEdge,
                   child: RepaintBoundary(
                     key: _repaintKey,
-                    child: GestureDetector(
-                      onPanStart: (details) {
-                        final position = details.localPosition;
-                        if (isErasing) {
-                          eraseStrokeAt(position);
-                        } else {
-                          setState(() => startNewStroke(position));
-                        }
-                      },
-                      onPanUpdate: (details) {
-                        final position = details.localPosition;
-                        if (!isErasing) {
-                          setState(() => addPointToStroke(position));
-                        }
-                      },
-                      onPanEnd: (_) {
-                        if (!isErasing) {
-                          setState(() => endStroke());
-                        }
-                      },
-                      child: CustomPaint(
-                        painter: StrokePainter(strokes, currentStroke),
-                        child: SizedBox.expand(
-                          child: Container(color: Colors.transparent),
+                    child: Container(
+                      color: Colors.white,
+                      child: GestureDetector(
+                        onPanStart: (details) {
+                          final position = details.localPosition;
+                          if (isErasing) {
+                            eraseStrokeAt(position);
+                          } else {
+                            setState(() => startNewStroke(position));
+                          }
+                        },
+                        onPanUpdate: (details) {
+                          final position = details.localPosition;
+                          if (!isErasing) {
+                            setState(() => addPointToStroke(position));
+                          }
+                        },
+                        onPanEnd: (_) {
+                          if (!isErasing) {
+                            setState(() => endStroke());
+                          }
+                        },
+                        child: CustomPaint(
+                          painter: StrokePainter(strokes, currentStroke),
+                          size: Size.infinite,
+                          child: Container(
+                            key: _canvasKey,
+                            color: Colors.transparent,
+                          ),
                         ),
                       ),
                     ),
