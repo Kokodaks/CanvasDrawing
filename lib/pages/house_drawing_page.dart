@@ -27,8 +27,9 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   double _accumulatedArea = 0;
   bool _modeJustChanged = false;
 
-  void startNewStroke(Offset position) {
-    if (!_isInCanvas(position)) return;
+  void startNewStroke(Offset globalPosition) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);
     currentStroke = [
       StrokePoint(
         offset: position,
@@ -43,8 +44,9 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     _restartDebounceTimer();
   }
 
-  void addPointToStroke(Offset position) {
-    if (!_isInCanvas(position)) return;
+  void addPointToStroke(Offset globalPosition) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);
     currentStroke.add(
       StrokePoint(
         offset: position,
@@ -64,11 +66,11 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     }
   }
 
-  void eraseStrokeAt(Offset tapPosition) {
-    if (!_isInCanvas(tapPosition)) return;
+  void eraseStrokeAt(Offset globalTapPosition) {
+    if (!_isInCanvas(globalTapPosition)) return;
+    final tapPosition = _toLocal(globalTapPosition);
 
     int beforeCount = strokes.length;
-
     setState(() {
       strokes.removeWhere((stroke) {
         return stroke.any((point) =>
@@ -87,11 +89,18 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     _restartDebounceTimer();
   }
 
-  bool _isInCanvas(Offset position) {
+  Offset _toLocal(Offset globalPosition) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return Offset.zero;
+    return renderBox.globalToLocal(globalPosition);
+  }
+
+  bool _isInCanvas(Offset globalPosition) {
     final renderBox =
     _canvasKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return false;
-    final localPosition = renderBox.globalToLocal(position);
+    final localPosition = renderBox.globalToLocal(globalPosition);
     return localPosition.dx >= 0 &&
         localPosition.dy >= 0 &&
         localPosition.dx <= renderBox.size.width &&
@@ -180,7 +189,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                       color: Colors.white,
                       child: GestureDetector(
                         onPanStart: (details) {
-                          final position = details.localPosition;
+                          final position = details.globalPosition;
                           if (isErasing) {
                             eraseStrokeAt(position);
                           } else {
@@ -188,7 +197,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                           }
                         },
                         onPanUpdate: (details) {
-                          final position = details.localPosition;
+                          final position = details.globalPosition;
                           if (!isErasing) {
                             setState(() => addPointToStroke(position));
                           }
