@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import '../question/house_question_page.dart';
 import '../drawing/stroke_point.dart';
 import '../drawing/stroke_data.dart';
+import '../services/api_service.dart';
 
 class HouseDrawingPage extends StatefulWidget {
   @override
@@ -305,13 +306,15 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
       child: ElevatedButton(
-        onPressed: () {
-          final jsonData = jsonEncode(data.map((stroke) => stroke.toJson()).toList());
+        onPressed: () async {
+          final jsonData = data.map((stroke) => stroke.toJson()).toList();
+          final result = await ApiService.sendAllStrokes(jsonData);
+          debugPrint(result);
+
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => HouseQuestionPage()),
           );
-          debugPrint(jsonData);
         },
         child: const Text("다음으로 넘어가기 →", style: TextStyle(fontSize: 18)),
         style: ElevatedButton.styleFrom(
