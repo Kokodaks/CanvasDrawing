@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../pages/person_drawing_page.dart';
+import '../drawing/person_drawing_page.dart';
 
 class TreeQuestionPage extends StatefulWidget {
   @override

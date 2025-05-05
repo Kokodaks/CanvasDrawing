@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../pages/house_drawing_page.dart';
+import '../pages/PrivacyConsentPage.dart';
+import 'dart:ui' as ui;
 
 class TestFirstPage extends StatefulWidget {
   @override
@@ -16,76 +17,98 @@ class _TestFirstPageState extends State<TestFirstPage> {
 
     if (name.isEmpty || rrn.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("이름과 주민등록번호를 모두 입력해주세요.")),
+        const SnackBar(content: Text("이름과 생년월일을 모두 입력해주세요.")),
       );
       return;
     }
+
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => HouseDrawingPage()),
+      MaterialPageRoute(builder: (context) => PrivacyConsentPage()),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    double screenWidth = MediaQuery.of(context).size.width;
+    double horizontalPadding = screenWidth > 600 ? 80 : 40;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF),
-      appBar: AppBar(
-        title: const Text("사용자 정보 입력"),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-        centerTitle: true,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/login.png'),
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 300),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 32), // 로고 제거 후 여백만 유지
+
+                    const Text(
+                      '피검사자 정보 입력',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 30),
+
+                    _buildTextField(controller: nameController, hint: '이름'),
+                    const SizedBox(height: 12),
+                    _buildTextField(controller: rrnController, hint: '생년월일'),
+                    const SizedBox(height: 30),
+
+                    SizedBox(
+                      height: 44,
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: submitInfo,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFA726),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        child: const Text("로그인", style: TextStyle(fontSize: 15)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const Text(
-              "검사 시작 전,\n이름과 주민등록번호를 입력해주세요.",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 40),
-            TextField(
-              controller: nameController,
-              decoration: InputDecoration(
-                labelText: "이름",
-                hintText: "홍길동",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: rrnController,
-              decoration: InputDecoration(
-                labelText: "주민등록번호",
-                hintText: "123456-1234567",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: submitInfo,
-              child: const Text("확인"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFA726),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 48),
-              ),
-            ),
-          ],
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hint,
+  }) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        hintText: hint,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: const BorderSide(color: Colors.orange),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(30),
+          borderSide: const BorderSide(color: Colors.orange),
         ),
       ),
     );

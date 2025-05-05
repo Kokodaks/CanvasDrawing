@@ -56,7 +56,16 @@ dev_dependencies:
 flutter:
   assets:
     - .env
-    - assets/logo.png
+    - assets/login.png
+    - assets/house_intro_background.png
+    - assets/Privacy.png
+    - assets/house_drawing_bg.png
+    - assets/tree_drawing_bg.png
+    - assets/person_drawing_bg.png
+    - assets/tree_intro_background.png
+    - assets/person_intro_background.png
+    - assets/pencil.png
+    - assets/eraser.png
 
 
   # The following line ensures that the Material Icons font is

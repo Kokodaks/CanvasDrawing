@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'pages/splash_screen.dart';
-
+import 'pages/test_first_page.dart';
+import 'package:flutter/services.dart';
 import 'tests/api_test.dart';
 
 Future<void> main() async {
@@ -16,7 +16,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Drawingi',
       debugShowCheckedModeBanner: false,
-      home: SplashScreen(),
+      home: TestFirstPage(),
 
     );
   }

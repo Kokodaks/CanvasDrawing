@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../pages/another_person_drawing_page.dart';
+import '../drawing/another_person_drawing_page.dart';
 
 class PersonQuestionPage extends StatefulWidget {
   @override

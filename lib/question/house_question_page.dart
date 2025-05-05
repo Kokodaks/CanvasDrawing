@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../pages/tree_drawing_page.dart';
+import '../drawing/tree_drawing_page.dart';
 
 
 class HouseQuestionPage extends StatefulWidget {
