@@ -57,15 +57,22 @@ flutter:
   assets:
     - .env
     - assets/login.png
-    - assets/house_intro_background.png
+    - assets/End.png
     - assets/Privacy.png
+    - assets/Question_bg.png
+    - assets/house_intro_background.png
     - assets/house_drawing_bg.png
-    - assets/tree_drawing_bg.png
-    - assets/person_drawing_bg.png
     - assets/tree_intro_background.png
+    - assets/tree_drawing_bg.png
     - assets/person_intro_background.png
+    - assets/Women_drawing_bg.png
+    - assets/Men_drawing_bg.png
+    - assets/Men_Intro_bg.png
+    - assets/Women_Intro_bg.png
     - assets/pencil.png
     - assets/eraser.png
+    - assets/Cloud.png
+    - assets/Rectangle.png
 
 
   # The following line ensures that the Material Icons font is

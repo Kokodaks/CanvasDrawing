@@ -1,7 +1,15 @@
 import 'package:flutter/material.dart';
-import '../drawing/another_person_drawing_page.dart';
 
 class PersonQuestionPage extends StatefulWidget {
+  final bool isMan;
+  final VoidCallback onQuestionComplete;
+
+  const PersonQuestionPage({
+    Key? key,
+    required this.isMan,
+    required this.onQuestionComplete,
+  }) : super(key: key);
+
   @override
   _PersonQuestionPageState createState() => _PersonQuestionPageState();
 }
@@ -10,18 +18,48 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
   final List<TextEditingController> controllers =
   List.generate(9, (_) => TextEditingController());
 
-  final List<String> questions = [
-    "1. 이 사람의 성별은 무엇인가요?",
-    "2. 이 사람은 누구인가요?" ,
-    "3. 이 사람은 몇 살인가요?",
-    "4. 누군가가 이 사람에게 상처를 준 적이 있나요?",
-    "5. 누가 이 사람을 보살피나요?",
-    "6. 이 사람은 행복합니까? 불행합니까?",
-    "7. 이 사람에게는 무엇이 필요합니까?",
-    "8. 당신은 이 사람이 어떻습니까? 좋습니까? 싫습니까?",
-    "9. 이 사람은 당신을 닮았습니까?",
+  late final List<String> questions;
+  int currentQuestion = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    questions = widget.isMan ? _manQuestions : _womanQuestions;
+  }
+
+  final List<String> _manQuestions = [
+    "1. 이 남자는 어떤 일을 하나요?",
+    "2. 그는 어디에 살고 있나요?",
+    "3. 이 남자는 기분이 좋아보이나요?",
+    "4. 남자는 무엇을 하고 있나요?",
+    "5. 주변 사람들과 어떤 관계인가요?",
+    "6. 그는 몇 살인가요?",
+    "7. 그는 어떤 옷을 입고 있나요?",
   ];
 
+  final List<String> _womanQuestions = [
+    "1. 이 여자는 어떤 일을 하나요?",
+    "2. 그녀는 어디에 살고 있나요?",
+    "3. 이 여자는 기분이 좋아보이나요?",
+    "4. 여자는 무엇을 하고 있나요?",
+    "5. 주변 사람들과 어떤 관계인가요?",
+    "6. 그녀는 몇 살인가요?",
+    "7. 그녀는 어떤 옷을 입고 있나요?",
+  ];
+
+  void _nextQuestionOrSubmit() {
+    if (currentQuestion < questions.length - 1) {
+      setState(() {
+        currentQuestion++;
+      });
+    } else {
+      for (int i = 0; i < questions.length; i++) {
+        debugPrint("${questions[i]} → ${controllers[i].text}");
+      }
+
+      widget.onQuestionComplete();
+    }
+  }
 
   @override
   void dispose() {
@@ -31,85 +69,95 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
     super.dispose();
   }
 
-  void submitAnswers() {
-    for (int i = 0; i < questions.length; i++) {
-      debugPrint("${questions[i]} → ${controllers[i].text}");
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("답변이 제출되었습니다!")),
-    );
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => AnotherPersonDrawingPage()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-        title: const Text("그린 사람에 대해 이야기해볼까요? 👤"),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            const Text(
-              "멋진 사람을 그려주셨네요!\n이제 그린 사람에 대해 몇 가지 질문에 답해주세요.\n\n🖼️ 모든 그림을 완성하느라 정말 잘했어요!",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      body: Stack(
+        children: [
+          // 배경
+          Positioned.fill(
+            child: Image.asset(
+              'assets/Question_bg.png',
+              fit: BoxFit.cover,
             ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView.builder(
-                itemCount: questions.length,
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          questions[index],
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: controllers[index],
-                          maxLines: 2,
-                          decoration: InputDecoration(
-                            hintText: "여기에 답변을 적어주세요...",
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            filled: true,
-                            fillColor: Colors.white,
-                          ),
-                        ),
-                      ],
+          ),
+
+          // 질문 구름
+          Positioned(
+            top: screenHeight * 0.12,
+            left: screenWidth * 0.07,
+            right: screenWidth * 0.07,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Image.asset('assets/Cloud.png'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    questions[currentQuestion],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: submitAnswers,
-              child: const Text("답변 제출하기 ✍️"),
+          ),
+
+          // 텍스트 입력 박스 (네모)
+          Positioned(
+            top: screenHeight * 0.72,
+            left: screenWidth * 0.07,
+            right: screenWidth * 0.07,
+            child: Stack(
+              children: [
+                Image.asset(
+                  'assets/Rectangle.png',
+                  width: screenWidth * 0.85,
+                ),
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: TextField(
+                      controller: controllers[currentQuestion],
+                      maxLines: null,
+                      style: const TextStyle(fontSize: 16),
+                      decoration: const InputDecoration(
+                        hintText: "아이의 대답을 입력해주세요",
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 다음 버튼
+          Positioned(
+            bottom: 40,
+            left: 24,
+            right: 24,
+            child: ElevatedButton(
+              onPressed: _nextQuestionOrSubmit,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFA726),
+                backgroundColor: const Color(0xFF00796B),
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
               ),
+              child: Text(currentQuestion < questions.length - 1 ? "다음으로 ➡️" : "제출하기 ✅"),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

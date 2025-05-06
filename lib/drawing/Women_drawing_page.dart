@@ -5,14 +5,24 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import '../question/person_question_page.dart';
+import '../question/tree_question_page.dart';
+import '../drawing/stroke_point.dart';
 
-class PersonDrawingPage extends StatefulWidget {
+class WomenDrawingPage extends StatefulWidget {
+  final VoidCallback onDrawingComplete;
+  final bool isMan;
+
+  const WomenDrawingPage({
+    Key? key,
+    required this.onDrawingComplete,
+    required this.isMan,
+  }) : super(key: key);
+
   @override
-  _PersonDrawingPageState createState() => _PersonDrawingPageState();
+  _WomenDrawingPageState createState() => _WomenDrawingPageState();
 }
 
-class _PersonDrawingPageState extends State<PersonDrawingPage> {
+class _WomenDrawingPageState extends State<WomenDrawingPage> {
   List<List<StrokePoint>> strokes = [];
   List<StrokePoint> currentStroke = [];
 
@@ -47,7 +57,7 @@ class _PersonDrawingPageState extends State<PersonDrawingPage> {
       Uint8List pngBytes = byteData!.buffer.asUint8List();
 
       final directory = Directory.systemTemp;
-      final path = '${directory.path}/Person_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final path = '${directory.path}/Women_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       await File(path).writeAsBytes(pngBytes);
       print("✅ 저장 완료: $path");
     } catch (e) {
@@ -135,18 +145,15 @@ class _PersonDrawingPageState extends State<PersonDrawingPage> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-
     final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210); // A4 비율: 210x297 mm
+    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
 
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/person_drawing_bg.png', fit: BoxFit.cover),
+            child: Image.asset('assets/Women_drawing_bg.png', fit: BoxFit.cover),
           ),
-
-          /// 그림판 (A4 비율, 중앙 배치, 테두리 포함)
           Center(
             child: RepaintBoundary(
               key: _repaintKey,
@@ -187,8 +194,6 @@ class _PersonDrawingPageState extends State<PersonDrawingPage> {
               ),
             ),
           ),
-
-          /// 툴 버튼 (우측 중앙)
           Positioned(
             right: 32,
             top: screenHeight / 2 - 80,
@@ -213,19 +218,12 @@ class _PersonDrawingPageState extends State<PersonDrawingPage> {
               ],
             ),
           ),
-
-          /// 완료 버튼
           Positioned(
             bottom: 40,
             left: 60,
             right: 60,
             child: ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => PersonQuestionPage()),
-                );
-              },
+              onPressed: () => widget.onDrawingComplete(),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -268,18 +266,13 @@ class _PersonDrawingPageState extends State<PersonDrawingPage> {
         ),
         child: Opacity(
           opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
-          child: Image.asset(
-            assetPath,
-            width: 60,
-            height: 60,
-          ),
+          child: Image.asset(assetPath, width: 60, height: 60),
         ),
       ),
     );
   }
 }
 
-/// StrokePoint 클래스
 class StrokePoint {
   final Offset offset;
   final Color color;
@@ -288,7 +281,6 @@ class StrokePoint {
   StrokePoint({required this.offset, required this.color, required this.strokeWidth});
 }
 
-/// CustomPainter 클래스
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;

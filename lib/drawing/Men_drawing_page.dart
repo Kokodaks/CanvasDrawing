@@ -1,18 +1,24 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'dart:math';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import '../question/person_question_page.dart';
+import '../question/tree_question_page.dart';
+import '../drawing/stroke_point.dart';
 
-class AnotherPersonDrawingPage extends StatefulWidget {
+class MenDrawingPage extends StatefulWidget {
+  final VoidCallback onDrawingComplete;
+  final bool isMan;
+
+  const MenDrawingPage({Key? key, required this.onDrawingComplete, required this.isMan}) : super(key: key);
+
   @override
-  _AnotherPersonDrawingPageState createState() => _AnotherPersonDrawingPageState();
+  _MenDrawingPageState createState() => _MenDrawingPageState();
 }
 
-class _AnotherPersonDrawingPageState extends State<AnotherPersonDrawingPage> {
+class _MenDrawingPageState extends State<MenDrawingPage> {
   List<List<StrokePoint>> strokes = [];
   List<StrokePoint> currentStroke = [];
 
@@ -47,7 +53,7 @@ class _AnotherPersonDrawingPageState extends State<AnotherPersonDrawingPage> {
       Uint8List pngBytes = byteData!.buffer.asUint8List();
 
       final directory = Directory.systemTemp;
-      final path = '${directory.path}/AnotherPerson_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final path = '${directory.path}/Men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       await File(path).writeAsBytes(pngBytes);
       print("✅ 저장 완료: $path");
     } catch (e) {
@@ -143,10 +149,9 @@ class _AnotherPersonDrawingPageState extends State<AnotherPersonDrawingPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/person_drawing_bg.png', fit: BoxFit.cover),
+            child: Image.asset('assets/Men_drawing_bg.png', fit: BoxFit.cover),
           ),
 
-          /// 그림판 (A4 비율, 중앙 배치, 테두리 포함)
           Center(
             child: RepaintBoundary(
               key: _repaintKey,
@@ -188,7 +193,6 @@ class _AnotherPersonDrawingPageState extends State<AnotherPersonDrawingPage> {
             ),
           ),
 
-          /// 툴 버튼 (우측 중앙)
           Positioned(
             right: 32,
             top: screenHeight / 2 - 80,
@@ -214,17 +218,13 @@ class _AnotherPersonDrawingPageState extends State<AnotherPersonDrawingPage> {
             ),
           ),
 
-          /// 완료 버튼
           Positioned(
             bottom: 40,
             left: 60,
             right: 60,
             child: ElevatedButton(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => PersonQuestionPage()),
-                );
+                widget.onDrawingComplete();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
@@ -279,7 +279,6 @@ class _AnotherPersonDrawingPageState extends State<AnotherPersonDrawingPage> {
   }
 }
 
-/// StrokePoint 클래스
 class StrokePoint {
   final Offset offset;
   final Color color;
@@ -288,7 +287,6 @@ class StrokePoint {
   StrokePoint({required this.offset, required this.color, required this.strokeWidth});
 }
 
-/// CustomPainter 클래스
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;

@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'pages/test_first_page.dart';
 import 'package:flutter/services.dart';
+import 'pages/test_first_page.dart';
 import 'tests/api_test.dart';
 
 Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(); // 환경 변수 로드
-  runApp(MyApp());
+
+  // 세로 모드만 허용
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -17,7 +25,6 @@ class MyApp extends StatelessWidget {
       title: 'Drawingi',
       debugShowCheckedModeBanner: false,
       home: TestFirstPage(),
-
     );
   }
 }

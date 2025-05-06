@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-class MenIntroPage extends StatelessWidget {
-  final VoidCallback onStartDrawing;
+class FinishPage extends StatelessWidget {
+  const FinishPage({Key? key}) : super(key: key);
 
-  const MenIntroPage({Key? key, required this.onStartDrawing}) : super(key: key);
+  void _exitApp() {
+    // 앱 완전 종료
+    SystemNavigator.pop();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,37 +17,37 @@ class MenIntroPage extends StatelessWidget {
           // 배경 이미지
           Positioned.fill(
             child: Image.asset(
-              'assets/Men_Intro_bg.png',
+              'assets/End.png',
               fit: BoxFit.cover,
             ),
           ),
 
           // 하단 버튼
           Positioned(
-            bottom: 24,
-            left: 24,
-            right: 24,
+            bottom: 40,
+            left: 40,
+            right: 40,
             child: SizedBox(
               height: 50,
               child: ElevatedButton(
+                onPressed: _exitApp,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFFA726),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
                   ),
                 ),
-                onPressed: onStartDrawing,
                 child: const Text(
-                  '그림 그리기',
+                  '앱 종료하기',
                   style: TextStyle(
-                    color: Colors.white,
                     fontSize: 16,
+                    color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
             ),
-          ),
+          )
         ],
       ),
     );

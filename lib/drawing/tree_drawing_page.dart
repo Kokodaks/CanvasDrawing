@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../question/tree_question_page.dart';
+import '../drawing/stroke_point.dart';
 
 
 class TreeDrawingPage extends StatefulWidget {
