@@ -236,12 +236,13 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                     child: Listener(
                       onPointerDown: (PointerDownEvent event) {
                         final position = event.position;
-                        final currentTime = DateTime.now().millisecondsSinceEpoch;
-                        final t = currentTime - strokeStartTime;
+                        strokeStartTime = DateTime.now().millisecondsSinceEpoch;
+                        strokeOrder++;
+
                         if (isErasing) {
                           eraseStrokeAt(position);
                         } else {
-                          setState(() => startNewStroke(position, event.pressure, 0));
+                          setState(() => startNewStroke(position, 0, event.pressure));
                         }
                       },
                       onPointerMove: (PointerMoveEvent event) {
@@ -250,7 +251,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                         final t = currentTime - strokeStartTime;
                         
                         if (!isErasing) {
-                          setState(() => addPointToStroke(position, event.pressure, t));
+                          setState(() => addPointToStroke(position, t, event.pressure));
                         }
                       },
                       onPointerUp: (_) {
