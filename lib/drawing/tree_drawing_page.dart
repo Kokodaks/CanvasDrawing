@@ -85,6 +85,13 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
       _accumulatedLength += (local - last).distance;
       if (_accumulatedLength > 500) {
         _takeScreenshot();
+
+        // 누적 길이 초과 시 stroke 로그 출력
+        print('📏 누적 길이 초과: 500px. 현재 stroke 좌표:');
+        for (final point in currentStroke) {
+          print('🖊️ 좌표: (\${point.offset.dx.toStringAsFixed(2)}, \${point.offset.dy.toStringAsFixed(2)}) 굵기: \${point.strokeWidth.toStringAsFixed(2)}');
+        }
+
         _accumulatedLength = 0;
       }
     }
@@ -103,6 +110,13 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   void _endStroke() {
     if (currentStroke.isNotEmpty) {
       strokes.add(currentStroke);
+
+      // stroke 끝날 때 로그 출력
+      print('✏️ Stroke 완료. 총 \${currentStroke.length}개 점');
+      for (final point in currentStroke) {
+        print('🖊️ 좌표: (\${point.offset.dx.toStringAsFixed(2)}, \${point.offset.dy.toStringAsFixed(2)}) 굵기: \${point.strokeWidth.toStringAsFixed(2)}');
+      }
+
       currentStroke = [];
     }
   }

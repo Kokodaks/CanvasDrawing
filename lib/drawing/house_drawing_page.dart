@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../question/house_question_page.dart';
-import '../drawing/stroke_point.dart';
 
 class HouseDrawingPage extends StatefulWidget {
   @override
@@ -102,6 +101,14 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   void _endStroke() {
     if (currentStroke.isNotEmpty) {
       strokes.add(currentStroke);
+
+      // 좌표 추출 로그 출력
+      print("🖊️ Stroke ${strokes.length} 좌표:");
+      for (final pt in currentStroke) {
+        final json = pt.toJson();
+        print("x: ${json['x']}, y: ${json['y']}, width: ${json['strokeWidth']}");
+      }
+
       currentStroke = [];
     }
   }
@@ -151,7 +158,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210); // A4 비율: 210x297 mm
+    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
 
     return Scaffold(
       body: Stack(
@@ -293,6 +300,13 @@ class StrokePoint {
   final double strokeWidth;
 
   StrokePoint({required this.offset, required this.color, required this.strokeWidth});
+
+  Map<String, dynamic> toJson() => {
+    'x': offset.dx,
+    'y': offset.dy,
+    'color': color.value,
+    'strokeWidth': strokeWidth,
+  };
 }
 
 class StrokePainter extends CustomPainter {

@@ -91,6 +91,11 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
     if (currentStroke.isNotEmpty) {
       Offset last = currentStroke.last.offset;
       _accumulatedLength += (local - last).distance;
+      if (_accumulatedLength > 500) {
+        _takeScreenshot();
+        _logCurrentStrokeCoordinates();
+        _accumulatedLength = 0.0;
+      }
     }
 
     currentStroke.add(
@@ -101,19 +106,25 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
       ),
     );
 
-    if (_accumulatedLength > 500) {
-      _takeScreenshot();
-      _accumulatedLength = 0.0;
-    }
-
     _restartDebounceTimer();
   }
 
   void _endStroke() {
     if (currentStroke.isNotEmpty) {
       strokes.add(currentStroke);
+      _logStroke(currentStroke);
       currentStroke = [];
     }
+  }
+
+  void _logCurrentStrokeCoordinates() {
+    final coords = currentStroke.map((p) => '(${p.offset.dx.toStringAsFixed(1)}, ${p.offset.dy.toStringAsFixed(1)})').join(', ');
+    print('🖋️ 누적 500px 이후 stroke 좌표: [$coords]');
+  }
+
+  void _logStroke(List<StrokePoint> stroke) {
+    final coords = stroke.map((p) => '(${p.offset.dx.toStringAsFixed(1)}, ${p.offset.dy.toStringAsFixed(1)})').join(', ');
+    print('🖋️ 전체 stroke 완료 후 좌표: [$coords]');
   }
 
   double _calculateStrokeWidthFromPressure(double pressure) {
@@ -131,10 +142,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
     final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return false;
     final local = box.globalToLocal(globalPosition);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= box.size.width &&
-        local.dy <= box.size.height;
+    return local.dx >= 0 && local.dy >= 0 && local.dx <= box.size.width && local.dy <= box.size.height;
   }
 
   void _eraseStrokeAtPosition(Offset position) {
@@ -142,9 +150,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
     const double eraseRadius = 20.0;
 
     setState(() {
-      strokes.removeWhere((stroke) {
-        return stroke.any((point) => (point.offset - local).distance <= eraseRadius);
-      });
+      strokes.removeWhere((stroke) => stroke.any((point) => (point.offset - local).distance <= eraseRadius));
     });
 
     if (_modeJustChanged) {
@@ -160,7 +166,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
+    final canvasHeight = canvasWidth * (297 / 210);
 
     return Scaffold(
       body: Stack(

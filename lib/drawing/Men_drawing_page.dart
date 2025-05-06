@@ -1,3 +1,4 @@
+// ... 기존 import 유지 ...
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -32,7 +33,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   bool _modeJustChanged = false;
   bool _buttonFlash = false;
 
-  double _accumulatedLength = 0.0; // 추가된 변수
+  double _accumulatedLength = 0.0;
 
   @override
   void dispose() {
@@ -108,6 +109,14 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   void _endStroke() {
     if (currentStroke.isNotEmpty) {
       strokes.add(currentStroke);
+
+      // 좌표 콘솔 출력 추가
+      print("🖊️ Stroke ${strokes.length} 좌표:");
+      for (final pt in currentStroke) {
+        final json = pt.toJson();
+        print("x: ${json['x']}, y: ${json['y']}, width: ${json['strokeWidth']}");
+      }
+
       currentStroke = [];
     }
   }
@@ -157,7 +166,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210); // A4 비율: 210x297 mm
+    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
 
     return Scaffold(
       body: Stack(
@@ -299,6 +308,13 @@ class StrokePoint {
   final double strokeWidth;
 
   StrokePoint({required this.offset, required this.color, required this.strokeWidth});
+
+  Map<String, dynamic> toJson() => {
+    'x': offset.dx,
+    'y': offset.dy,
+    'color': color.value,
+    'strokeWidth': strokeWidth,
+  };
 }
 
 class StrokePainter extends CustomPainter {
