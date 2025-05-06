@@ -161,7 +161,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   }
 
   void _handleLengthBasedCapture() {
-    if (_accumulatedLength > 500) {
+    if (_accumulatedLength > 1000) {
       _takeScreenshotDirectly();
       _accumulatedLength = 0;
     }
