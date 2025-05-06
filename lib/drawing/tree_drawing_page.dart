@@ -8,7 +8,6 @@ import 'package:flutter/rendering.dart';
 import '../question/tree_question_page.dart';
 import '../drawing/stroke_point.dart';
 
-
 class TreeDrawingPage extends StatefulWidget {
   @override
   _TreeDrawingPageState createState() => _TreeDrawingPageState();
@@ -28,6 +27,8 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   bool _modeJustChanged = false;
   bool _buttonFlash = false;
 
+  double _accumulatedLength = 0.0;
+
   @override
   void dispose() {
     _debounceTimer?.cancel();
@@ -43,7 +44,8 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
 
   Future<void> _takeScreenshot() async {
     try {
-      RenderRepaintBoundary boundary = _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      RenderRepaintBoundary boundary =
+      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
@@ -77,6 +79,16 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   void _addPoint(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+
+    if (currentStroke.isNotEmpty) {
+      Offset last = currentStroke.last.offset;
+      _accumulatedLength += (local - last).distance;
+      if (_accumulatedLength > 500) {
+        _takeScreenshot();
+        _accumulatedLength = 0;
+      }
+    }
+
     currentStroke.add(
       StrokePoint(
         offset: local,
@@ -84,6 +96,7 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
       ),
     );
+
     _restartDebounceTimer();
   }
 
@@ -139,7 +152,7 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210); // A4 비율: 210x297 mm
+    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
 
     return Scaffold(
       body: Stack(
@@ -147,8 +160,6 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
           Positioned.fill(
             child: Image.asset('assets/tree_drawing_bg.png', fit: BoxFit.cover),
           ),
-
-          /// 그림판 (A4 비율, 중앙 배치, 테두리 포함)
           Center(
             child: RepaintBoundary(
               key: _repaintKey,
@@ -189,8 +200,6 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
               ),
             ),
           ),
-
-          /// 툴 버튼 (우측 중앙)
           Positioned(
             right: 32,
             top: screenHeight / 2 - 80,
@@ -215,8 +224,6 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
               ],
             ),
           ),
-
-          /// 완료 버튼
           Positioned(
             bottom: 40,
             left: 60,
@@ -281,7 +288,6 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   }
 }
 
-/// StrokePoint 클래스
 class StrokePoint {
   final Offset offset;
   final Color color;
@@ -290,7 +296,6 @@ class StrokePoint {
   StrokePoint({required this.offset, required this.color, required this.strokeWidth});
 }
 
-/// CustomPainter 클래스
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;

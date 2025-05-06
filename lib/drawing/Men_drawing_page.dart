@@ -32,6 +32,8 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   bool _modeJustChanged = false;
   bool _buttonFlash = false;
 
+  double _accumulatedLength = 0.0; // 추가된 변수
+
   @override
   void dispose() {
     _debounceTimer?.cancel();
@@ -81,6 +83,12 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   void _addPoint(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+
+    if (currentStroke.isNotEmpty) {
+      final Offset last = currentStroke.last.offset;
+      _accumulatedLength += (local - last).distance;
+    }
+
     currentStroke.add(
       StrokePoint(
         offset: local,
@@ -88,6 +96,12 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
       ),
     );
+
+    if (_accumulatedLength > 500) {
+      _takeScreenshot();
+      _accumulatedLength = 0;
+    }
+
     _restartDebounceTimer();
   }
 

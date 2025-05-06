@@ -26,6 +26,8 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   bool _modeJustChanged = false;
   bool _buttonFlash = false;
 
+  double _accumulatedLength = 0.0;
+
   @override
   void dispose() {
     _debounceTimer?.cancel();
@@ -75,6 +77,17 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   void _addPoint(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+
+    if (currentStroke.isNotEmpty) {
+      Offset last = currentStroke.last.offset;
+      _accumulatedLength += (local - last).distance;
+
+      if (_accumulatedLength >= 500.0) {
+        _takeScreenshot();
+        _accumulatedLength = 0.0;
+      }
+    }
+
     currentStroke.add(
       StrokePoint(
         offset: local,
@@ -82,6 +95,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
       ),
     );
+
     _restartDebounceTimer();
   }
 
@@ -145,8 +159,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
           Positioned.fill(
             child: Image.asset('assets/house_drawing_bg.png', fit: BoxFit.cover),
           ),
-
-          /// 그림판 (A4 비율, 중앙 배치, 테두리 포함)
           Center(
             child: RepaintBoundary(
               key: _repaintKey,
@@ -187,8 +199,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
               ),
             ),
           ),
-
-          /// 툴 버튼 (우측 중앙)
           Positioned(
             right: 32,
             top: screenHeight / 2 - 80,
@@ -213,8 +223,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
               ],
             ),
           ),
-
-          /// 완료 버튼
           Positioned(
             bottom: 40,
             left: 60,
@@ -279,7 +287,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   }
 }
 
-/// StrokePoint 클래스
 class StrokePoint {
   final Offset offset;
   final Color color;
@@ -288,7 +295,6 @@ class StrokePoint {
   StrokePoint({required this.offset, required this.color, required this.strokeWidth});
 }
 
-/// CustomPainter 클래스
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;

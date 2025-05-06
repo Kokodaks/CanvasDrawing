@@ -72,6 +72,8 @@ flutter:
     - assets/pencil.png
     - assets/eraser.png
     - assets/Cloud.png
+    - assets/mic_bg.png
+    - assets/mic.png
     - assets/Rectangle.png
 
 
