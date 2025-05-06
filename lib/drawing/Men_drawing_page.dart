@@ -1,4 +1,3 @@
-// ... 기존 import 유지 ...
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -67,11 +66,13 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   void _startStroke(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+    int t = DateTime.now().millisecondsSinceEpoch;
     currentStroke = [
       StrokePoint(
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: t,
       )
     ];
     if (_modeJustChanged) {
@@ -84,9 +85,10 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   void _addPoint(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+    int t = DateTime.now().millisecondsSinceEpoch;
 
     if (currentStroke.isNotEmpty) {
-      final Offset last = currentStroke.last.offset;
+      Offset last = currentStroke.last.offset!;
       _accumulatedLength += (local - last).distance;
     }
 
@@ -95,6 +97,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: t,
       ),
     );
 
@@ -110,11 +113,10 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     if (currentStroke.isNotEmpty) {
       strokes.add(currentStroke);
 
-      // 좌표 콘솔 출력 추가
       print("🖊️ Stroke ${strokes.length} 좌표:");
       for (final pt in currentStroke) {
         final json = pt.toJson();
-        print("x: ${json['x']}, y: ${json['y']}, width: ${json['strokeWidth']}");
+        print("x: ${json['x']}, y: ${json['y']}, width: ${json['p']}");
       }
 
       currentStroke = [];
@@ -148,7 +150,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
 
     setState(() {
       strokes.removeWhere((stroke) {
-        return stroke.any((point) => (point.offset - local).distance <= eraseRadius);
+        return stroke.any((point) => (point.offset! - local).distance <= eraseRadius);
       });
     });
 
@@ -166,7 +168,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     final screenHeight = MediaQuery.of(context).size.height;
 
     final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
+    final canvasHeight = canvasWidth * (297 / 210);
 
     return Scaffold(
       body: Stack(
@@ -174,7 +176,6 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
           Positioned.fill(
             child: Image.asset('assets/Men_drawing_bg.png', fit: BoxFit.cover),
           ),
-
           Center(
             child: RepaintBoundary(
               key: _repaintKey,
@@ -215,7 +216,6 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
               ),
             ),
           ),
-
           Positioned(
             right: 32,
             top: screenHeight / 2 - 80,
@@ -240,7 +240,6 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
               ],
             ),
           ),
-
           Positioned(
             bottom: 40,
             left: 60,
@@ -302,21 +301,6 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   }
 }
 
-class StrokePoint {
-  final Offset offset;
-  final Color color;
-  final double strokeWidth;
-
-  StrokePoint({required this.offset, required this.color, required this.strokeWidth});
-
-  Map<String, dynamic> toJson() => {
-    'x': offset.dx,
-    'y': offset.dy,
-    'color': color.value,
-    'strokeWidth': strokeWidth,
-  };
-}
-
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;
@@ -333,7 +317,7 @@ class StrokePainter extends CustomPainter {
           ..color = p1.color
           ..strokeWidth = p1.strokeWidth
           ..strokeCap = StrokeCap.round;
-        canvas.drawLine(p1.offset, p2.offset, paint);
+        canvas.drawLine(p1.offset!, p2.offset!, paint);
       }
     }
   }
