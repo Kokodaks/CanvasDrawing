@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:collection/collection.dart';
 import '../question/house_question_page.dart';
 import '../drawing/stroke_point.dart';
 import '../drawing/stroke_data.dart';
@@ -17,6 +18,7 @@ class HouseDrawingPage extends StatefulWidget {
 
 class _HouseDrawingPageState extends State<HouseDrawingPage> {
   List<StrokeData> data = [];
+  List<StrokeData> finalDrawingDataOnly = [];
   List<List<StrokePoint>> strokes = [];
   List<StrokePoint> currentStroke = [];
 
@@ -72,9 +74,9 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
   void endStroke() {
     if (currentStroke.isNotEmpty) {
-      data.add(
-          StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke)
-      );
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke));
+
       strokes.add(currentStroke);
       currentStroke = [];
     }
@@ -86,17 +88,24 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
     int beforeCount = strokes.length;
 
-    List<StrokePoint> toBeErased = strokes.firstWhere((stroke) {
+    final toBeErased = strokes.firstWhereOrNull((stroke) {
       return stroke.any((point) =>
       point.offset != null &&
           (point.offset! - tapPosition).distance <= eraserSize);
     });
 
-    data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased));
+    if(toBeErased != null){
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased));
+    }
 
     setState(() {
       strokes.removeWhere((stroke) {
         return stroke.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) =>
         point.offset != null &&
             (point.offset! - tapPosition).distance <= eraserSize);
       });
@@ -307,8 +316,9 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
       child: ElevatedButton(
         onPressed: () async {
-          final jsonData = data.map((stroke) => stroke.toJson()).toList();
-          final result = await ApiService.sendAllStrokes(jsonData);
+          final allJsonData = data.map((stroke) => stroke.toJson()).toList();
+          final finalDrawingJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
+          final result = await ApiService.sendAllStrokes(allJsonData, finalDrawingJsonData);
           debugPrint(result);
 
           Navigator.push(
