@@ -18,5 +18,6 @@ class StrokePoint {
     "x": offset?.dx,
     "y": offset?.dy,
     "t": t,
+    "p": strokeWidth
   };
 }
