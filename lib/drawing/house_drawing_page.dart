@@ -26,7 +26,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   int strokeOrder = 0;
   int startTime = DateTime.now().millisecondsSinceEpoch;
 
-  double fixedBrushSize = 10.0;
+  // double fixedBrushSize = 10.0;
   double eraserSize = 10.0;
   bool isErasing = false;
   Color selectedColor = Colors.black;
@@ -35,17 +35,18 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   GlobalKey _canvasKey = GlobalKey();
   Timer? _debounceTimer;
 
-  double _accumulatedArea = 0;
+  double _accumulatedLength = 0.0;
   bool _modeJustChanged = false;
 
-  void startNewStroke(Offset globalPosition, int time) {
+
+  void startNewStroke(Offset globalPosition, int time, double pressure) {
     if (!_isInCanvas(globalPosition)) return;
     final position = _toLocal(globalPosition);
     currentStroke = [
       StrokePoint(
         offset: position,
         color: selectedColor,
-        strokeWidth: fixedBrushSize,
+        strokeWidth: _calculateStrokeWidthFromPressure(pressure),
         t: time,
       )
     ];
@@ -56,21 +57,30 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     _restartDebounceTimer();
   }
 
-  void addPointToStroke(Offset globalPosition, int time) {
+
+  void addPointToStroke(Offset globalPosition, int time, double pressure) {
     if (!_isInCanvas(globalPosition)) return;
     final position = _toLocal(globalPosition);
+    final width = _calculateStrokeWidthFromPressure(pressure);
+
+    if (currentStroke.isNotEmpty) {
+      final prev = currentStroke.last.offset!;
+      _accumulatedLength += (position - prev).distance;
+    }
+
     currentStroke.add(
       StrokePoint(
-        offset: position,
-        color: selectedColor,
-        strokeWidth: fixedBrushSize,
-        t: time
+          offset: position,
+          color: selectedColor,
+          strokeWidth: width,
+          t: time
       ),
     );
-    _accumulateArea();
-    _handleAreaBasedCapture();
+
+    _handleLengthBasedCapture();
     _restartDebounceTimer();
   }
+
 
   void endStroke() {
     if (currentStroke.isNotEmpty) {
@@ -150,16 +160,22 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     });
   }
 
-  void _handleAreaBasedCapture() {
-    if (_accumulatedArea > 50000) {
+  void _handleLengthBasedCapture() {
+    if (_accumulatedLength > 500) {
       _takeScreenshotDirectly();
-      _accumulatedArea = 0;
+      _accumulatedLength = 0;
     }
   }
 
-  void _accumulateArea() {
-    _accumulatedArea += fixedBrushSize * fixedBrushSize;
+
+
+  double _calculateStrokeWidthFromPressure(double pressure) {
+    const double minWidth = 2.0;
+    const double maxWidth = 20.0;
+    final p = pressure.clamp(0.0, 1.0);
+    return minWidth + (maxWidth - minWidth) * p;
   }
+
 
   Future<void> _takeScreenshotDirectly() async {
     try {
@@ -217,41 +233,38 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                   clipBehavior: Clip.hardEdge,
                   child: RepaintBoundary(
                     key: _repaintKey,
-                    child: Container(
-                      color: Colors.white,
-                      child: GestureDetector(
-                        onPanStart: (details) {
-                          final position = details.globalPosition;
-                          strokeStartTime = DateTime.now().millisecondsSinceEpoch;
-                          strokeOrder++;
+                    child: Listener(
+                      onPointerDown: (PointerDownEvent event) {
+                        final position = event.position;
+                        strokeStartTime = DateTime.now().millisecondsSinceEpoch;
+                        strokeOrder++;
 
-                          if (isErasing) {
-                            eraseStrokeAt(position);
-                          } else {
-                            setState(() => startNewStroke(position, 0));
-                          }
+                        if (isErasing) {
+                          eraseStrokeAt(position);
+                        } else {
+                          setState(() => startNewStroke(position, 0, event.pressure));
+                        }
+                      },
+                      onPointerMove: (PointerMoveEvent event) {
+                        final position = event.position;
+                        final currentTime = DateTime.now().millisecondsSinceEpoch;
+                        final t = currentTime - strokeStartTime;
 
-                        },
-                        onPanUpdate: (details) {
-                          final position = details.globalPosition;
-                          final currentTime = DateTime.now().millisecondsSinceEpoch;
-                          final t = currentTime - strokeStartTime;
-                          if (!isErasing) {
-                            setState(() => addPointToStroke(position, t));
-                          }
-                        },
-                        onPanEnd: (_) {
-                          if (!isErasing) {
-                            setState(() => endStroke());
-                          }
-                        },
-                        child: CustomPaint(
-                          painter: StrokePainter(strokes, currentStroke),
-                          size: Size.infinite,
-                          child: Container(
-                            key: _canvasKey,
-                            color: Colors.transparent,
-                          ),
+                        if (!isErasing) {
+                          setState(() => addPointToStroke(position, t, event.pressure));
+                        }
+                      },
+                      onPointerUp: (_) {
+                        if (!isErasing) {
+                          setState(() => endStroke());
+                        }
+                      },
+                      child: CustomPaint(
+                        painter: StrokePainter(strokes, currentStroke),
+                        size: Size.infinite,
+                        child: Container(
+                          key: _canvasKey,
+                          color: Colors.transparent,
                         ),
                       ),
                     ),
@@ -296,16 +309,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
               });
             },
           ),
-          const SizedBox(width: 10),
-          const Text("펜 두께:"),
-          Expanded(
-            child: Slider(
-              value: fixedBrushSize,
-              min: 2,
-              max: 50,
-              onChanged: (value) => setState(() => fixedBrushSize = value),
-            ),
-          ),
         ],
       ),
     );
@@ -345,6 +348,9 @@ class StrokePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final backgroundPaint = Paint()..color = Colors.white;
+    canvas.drawRect(Offset.zero & size, backgroundPaint);
+
     for (final stroke in [...strokes, currentStroke]) {
       for (int i = 0; i < stroke.length - 1; i++) {
         if (stroke[i].offset != null && stroke[i + 1].offset != null) {

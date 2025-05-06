@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../pages/person_drawing_page.dart';
+import '../pages/Person_IntroPage.dart';
 
 class TreeQuestionPage extends StatefulWidget {
   @override
@@ -8,7 +8,7 @@ class TreeQuestionPage extends StatefulWidget {
 
 class _TreeQuestionPageState extends State<TreeQuestionPage> {
   final List<TextEditingController> controllers =
-  List.generate(9, (_) => TextEditingController());
+  List.generate(7, (_) => TextEditingController());
 
   final List<String> questions = [
     "1. 이 나무의 종류는 무엇인가요?",
@@ -20,6 +20,25 @@ class _TreeQuestionPageState extends State<TreeQuestionPage> {
     "7. 나무가 햇빛을 충분히 받고 있나요?",
   ];
 
+  int currentQuestion = 0;
+
+  void _nextQuestionOrSubmit() {
+    if (currentQuestion < questions.length - 1) {
+      setState(() {
+        currentQuestion++;
+      });
+    } else {
+      for (int i = 0; i < questions.length; i++) {
+        debugPrint("${questions[i]} → ${controllers[i].text}");
+      }
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => PersonIntroPage()),
+      );
+    }
+  }
+
   @override
   void dispose() {
     for (var controller in controllers) {
@@ -28,84 +47,101 @@ class _TreeQuestionPageState extends State<TreeQuestionPage> {
     super.dispose();
   }
 
-  void submitAnswers() {
-    for (int i = 0; i < questions.length; i++) {
-      debugPrint("${questions[i]} → ${controllers[i].text}");
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("답변이 제출되었습니다!")),
-    );
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => PersonDrawingPage()),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-        title: const Text("그린 나무에 대해 이야기해볼까요? 🌳"),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            const Text(
-              "멋진 나무를 그려주셨네요!\n이제 그린 나무에 대해 몇 가지 질문에 답해주세요.\n\n🟩 모든 그림을 완성하느라 정말 잘했어요!",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      body: Stack(
+        children: [
+          // 📌 배경 이미지
+          Positioned.fill(
+            child: Image.asset(
+              'assets/Question_bg.png',
+              fit: BoxFit.cover,
             ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView.builder(
-                itemCount: questions.length,
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          questions[index],
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: controllers[index],
-                          maxLines: 2,
-                          decoration: InputDecoration(
-                            hintText: "여기에 답변을 적어주세요...",
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8)),
-                            filled: true,
-                            fillColor: Colors.white,
-                          ),
-                        ),
-                      ],
+          ),
+
+          // 🟠 구름 이미지 + 질문 텍스트 (상단 12% 지점)
+          Positioned(
+            top: screenHeight * 0.1,
+            left:0,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Image.asset(
+                  'assets/Cloud.png',
+                  width: screenWidth * 0.8, // 너비 비율
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Text(
+                    questions[currentQuestion],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: submitAnswers,
-              child: const Text("답변 제출하기 ✍️"),
+          ),
+
+          // 네모 이미지 + 텍스트 입력 창
+          Positioned(
+            top: screenHeight * 0.55,
+            left: screenWidth * 0.05,
+            right: screenWidth * 0.05,
+            child: Stack(
+              children: [
+                Image.asset(
+                  'assets/Rectangle.png',
+                  width: screenWidth * 0.9,
+                ),
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: TextField(
+                      controller: controllers[currentQuestion],
+                      maxLines: null,
+                      style: const TextStyle(fontSize: 16),
+                      decoration: const InputDecoration(
+                        hintText: "아이의 대답을 입력해주세요",
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 다음으로 버튼
+          Positioned(
+            bottom: screenHeight * 0.05,
+            left: screenWidth * 0.05,
+            right: screenWidth * 0.05,
+            child: ElevatedButton(
+              onPressed: _nextQuestionOrSubmit,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFA726),
+                backgroundColor: const Color(0xFF00796B),
                 foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 48),
+                minimumSize: Size(screenWidth * 0.9, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+              ),
+              child: Text(
+                currentQuestion < questions.length - 1
+                    ? "다음으로 ➡️"
+                    : "제출하기 ✅",
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
