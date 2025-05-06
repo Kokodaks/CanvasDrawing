@@ -31,6 +31,17 @@ migrate_working_dir/
 .pub/
 /build/
 
+#Android
+android/.cxx/
+android/app/.cxx/
+android/app/build/
+
+#CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.ninja
+
 # Symbolication related
 app.*.symbols
 

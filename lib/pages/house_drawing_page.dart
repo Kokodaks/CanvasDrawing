@@ -1,10 +1,15 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:collection/collection.dart';
 import '../question/house_question_page.dart';
+import '../drawing/stroke_point.dart';
+import '../drawing/stroke_data.dart';
+import '../services/api_service.dart';
 
 class HouseDrawingPage extends StatefulWidget {
   @override
@@ -12,8 +17,14 @@ class HouseDrawingPage extends StatefulWidget {
 }
 
 class _HouseDrawingPageState extends State<HouseDrawingPage> {
+  List<StrokeData> data = [];
+  List<StrokeData> finalDrawingDataOnly = [];
   List<List<StrokePoint>> strokes = [];
   List<StrokePoint> currentStroke = [];
+
+  int strokeStartTime = 0;
+  int strokeOrder = 0;
+  int startTime = DateTime.now().millisecondsSinceEpoch;
 
   double fixedBrushSize = 10.0;
   double eraserSize = 10.0;
@@ -27,7 +38,8 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   double _accumulatedLength = 0.0;
   bool _modeJustChanged = false;
 
-  void startNewStroke(Offset globalPosition, double pressure) {
+
+  void startNewStroke(Offset globalPosition, int time, double pressure) {
     if (!_isInCanvas(globalPosition)) return;
     final position = _toLocal(globalPosition);
     currentStroke = [
@@ -35,6 +47,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
         offset: position,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: time,
       )
     ];
     if (_modeJustChanged && !isErasing) {
@@ -44,7 +57,8 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     _restartDebounceTimer();
   }
 
-  void addPointToStroke(Offset globalPosition, double pressure) {
+
+  void addPointToStroke(Offset globalPosition, int time, double pressure) {
     if (!_isInCanvas(globalPosition)) return;
     final position = _toLocal(globalPosition);
     final width = _calculateStrokeWidthFromPressure(pressure);
@@ -59,6 +73,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
         offset: position,
         color: selectedColor,
         strokeWidth: width,
+        t: time
       ),
     );
 
@@ -69,6 +84,9 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
   void endStroke() {
     if (currentStroke.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke));
+
       strokes.add(currentStroke);
       currentStroke = [];
     }
@@ -79,9 +97,25 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     final tapPosition = _toLocal(globalTapPosition);
 
     int beforeCount = strokes.length;
+
+    final toBeErased = strokes.firstWhereOrNull((stroke) {
+      return stroke.any((point) =>
+      point.offset != null &&
+          (point.offset! - tapPosition).distance <= eraserSize);
+    });
+
+    if(toBeErased != null){
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased));
+    }
+
     setState(() {
       strokes.removeWhere((stroke) {
         return stroke.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) =>
         point.offset != null &&
             (point.offset! - tapPosition).distance <= eraserSize);
       });
@@ -202,16 +236,21 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                     child: Listener(
                       onPointerDown: (PointerDownEvent event) {
                         final position = event.position;
+                        final currentTime = DateTime.now().millisecondsSinceEpoch;
+                        final t = currentTime - strokeStartTime;
                         if (isErasing) {
                           eraseStrokeAt(position);
                         } else {
-                          setState(() => startNewStroke(position, event.pressure));
+                          setState(() => startNewStroke(position, event.pressure, 0));
                         }
                       },
                       onPointerMove: (PointerMoveEvent event) {
                         final position = event.position;
+                        final currentTime = DateTime.now().millisecondsSinceEpoch;
+                        final t = currentTime - strokeStartTime;
+                        
                         if (!isErasing) {
-                          setState(() => addPointToStroke(position, event.pressure));
+                          setState(() => addPointToStroke(position, event.pressure, t));
                         }
                       },
                       onPointerUp: (_) {
@@ -278,7 +317,12 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
       child: ElevatedButton(
-        onPressed: () {
+        onPressed: () async {
+          final allJsonData = data.map((stroke) => stroke.toJson()).toList();
+          final finalDrawingJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
+          final result = await ApiService.sendAllStrokes(allJsonData, finalDrawingJsonData);
+          debugPrint(result);
+
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => HouseQuestionPage()),
@@ -293,18 +337,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       ),
     );
   }
-}
-
-class StrokePoint {
-  final Offset? offset;
-  final Color color;
-  final double strokeWidth;
-
-  StrokePoint({
-    required this.offset,
-    required this.color,
-    required this.strokeWidth,
-  });
 }
 
 class StrokePainter extends CustomPainter {
