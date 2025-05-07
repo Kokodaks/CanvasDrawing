@@ -161,7 +161,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   }
 
   void _handleLengthBasedCapture() {
-    if (_accumulatedLength > 500) {
+    if (_accumulatedLength > 1000) {
       _takeScreenshotDirectly();
       _accumulatedLength = 0;
     }
@@ -319,10 +319,11 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
       child: ElevatedButton(
         onPressed: () async {
+
           final allJsonData = data.map((stroke) => stroke.toJson()).toList();
-          final finalDrawingJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
-          final result = await ApiService.sendAllStrokes(allJsonData, finalDrawingJsonData);
-          debugPrint(result);
+          final finalJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
+          ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
+
 
           Navigator.push(
             context,
