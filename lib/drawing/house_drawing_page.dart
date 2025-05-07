@@ -19,7 +19,6 @@ class HouseDrawingPage extends StatefulWidget {
 class _HouseDrawingPageState extends State<HouseDrawingPage> {
   List<List<StrokePoint>> strokes = [];
   List<StrokePoint> currentStroke = [];
-
   bool isErasing = false;
   Color selectedColor = Colors.black;
 
@@ -47,12 +46,10 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
   Future<void> _takeScreenshot() async {
     try {
-      RenderRepaintBoundary boundary =
-      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      RenderRepaintBoundary boundary = _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
-
       final directory = Directory.systemTemp;
       final path = '${directory.path}/house_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       await File(path).writeAsBytes(pngBytes);
