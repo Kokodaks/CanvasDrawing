@@ -70,11 +70,13 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
   void _startStroke(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+    int t = DateTime.now().millisecondsSinceEpoch;
     currentStroke = [
       StrokePoint(
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: t,
       )
     ];
     if (_modeJustChanged) {
@@ -87,9 +89,10 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
   void _addPoint(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+    int t = DateTime.now().millisecondsSinceEpoch;
 
     if (currentStroke.isNotEmpty) {
-      Offset last = currentStroke.last.offset;
+      Offset last = currentStroke.last.offset!;
       _accumulatedLength += (local - last).distance;
       if (_accumulatedLength > 500) {
         _takeScreenshot();
@@ -103,6 +106,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: t,
       ),
     );
 
@@ -118,12 +122,12 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
   }
 
   void _logCurrentStrokeCoordinates() {
-    final coords = currentStroke.map((p) => '(${p.offset.dx.toStringAsFixed(1)}, ${p.offset.dy.toStringAsFixed(1)})').join(', ');
+    final coords = currentStroke.map((p) => '(${p.offset!.dx.toStringAsFixed(1)}, ${p.offset!.dy.toStringAsFixed(1)})').join(', ');
     print('🖋️ 누적 500px 이후 stroke 좌표: [$coords]');
   }
 
   void _logStroke(List<StrokePoint> stroke) {
-    final coords = stroke.map((p) => '(${p.offset.dx.toStringAsFixed(1)}, ${p.offset.dy.toStringAsFixed(1)})').join(', ');
+    final coords = stroke.map((p) => '(${p.offset!.dx.toStringAsFixed(1)}, ${p.offset!.dy.toStringAsFixed(1)})').join(', ');
     print('🖋️ 전체 stroke 완료 후 좌표: [$coords]');
   }
 
@@ -150,7 +154,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
     const double eraseRadius = 20.0;
 
     setState(() {
-      strokes.removeWhere((stroke) => stroke.any((point) => (point.offset - local).distance <= eraseRadius));
+      strokes.removeWhere((stroke) => stroke.any((point) => (point.offset! - local).distance <= eraseRadius));
     });
 
     if (_modeJustChanged) {
@@ -293,14 +297,6 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
   }
 }
 
-class StrokePoint {
-  final Offset offset;
-  final Color color;
-  final double strokeWidth;
-
-  StrokePoint({required this.offset, required this.color, required this.strokeWidth});
-}
-
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;
@@ -317,7 +313,7 @@ class StrokePainter extends CustomPainter {
           ..color = p1.color
           ..strokeWidth = p1.strokeWidth
           ..strokeCap = StrokeCap.round;
-        canvas.drawLine(p1.offset, p2.offset, paint);
+        canvas.drawLine(p1.offset!, p2.offset!, paint);
       }
     }
   }
