@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -7,7 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import '../question/tree_question_page.dart';
 import '../drawing/stroke_point.dart';
-
+import '../drawing/stroke_data.dart';
+import '../services/api_service.dart';
 class TreeDrawingPage extends StatefulWidget {
   @override
   _TreeDrawingPageState createState() => _TreeDrawingPageState();
@@ -16,7 +16,6 @@ class TreeDrawingPage extends StatefulWidget {
 class _TreeDrawingPageState extends State<TreeDrawingPage> {
   List<List<StrokePoint>> strokes = [];
   List<StrokePoint> currentStroke = [];
-
   bool isErasing = false;
   Color selectedColor = Colors.black;
 
@@ -28,6 +27,11 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   bool _buttonFlash = false;
 
   double _accumulatedLength = 0.0;
+
+  List<StrokeData> data = [];
+  List<StrokeData> finalDrawingDataOnly = [];
+  int strokeOrder = 0;
+  int strokeStartTime = 0;
 
   @override
   void dispose() {
@@ -44,12 +48,10 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
 
   Future<void> _takeScreenshot() async {
     try {
-      RenderRepaintBoundary boundary =
-      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      RenderRepaintBoundary boundary = _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
-
       final directory = Directory.systemTemp;
       final path = '${directory.path}/Tree_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       await File(path).writeAsBytes(pngBytes);
@@ -62,11 +64,15 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   void _startStroke(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+    int t = DateTime.now().millisecondsSinceEpoch;
+    strokeStartTime = t;
+    strokeOrder++;
     currentStroke = [
       StrokePoint(
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: t,
       )
     ];
     if (_modeJustChanged) {
@@ -79,19 +85,13 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   void _addPoint(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+    int t = DateTime.now().millisecondsSinceEpoch;
 
     if (currentStroke.isNotEmpty) {
       Offset last = currentStroke.last.offset;
       _accumulatedLength += (local - last).distance;
       if (_accumulatedLength > 500) {
         _takeScreenshot();
-
-        // 누적 길이 초과 시 stroke 로그 출력
-        print('📏 누적 길이 초과: 500px. 현재 stroke 좌표:');
-        for (final point in currentStroke) {
-          print('🖊️ 좌표: (\${point.offset.dx.toStringAsFixed(2)}, \${point.offset.dy.toStringAsFixed(2)}) 굵기: \${point.strokeWidth.toStringAsFixed(2)}');
-        }
-
         _accumulatedLength = 0;
       }
     }
@@ -101,6 +101,7 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: t,
       ),
     );
 
@@ -109,14 +110,9 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
 
   void _endStroke() {
     if (currentStroke.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
       strokes.add(currentStroke);
-
-      // stroke 끝날 때 로그 출력
-      print('✏️ Stroke 완료. 총 \${currentStroke.length}개 점');
-      for (final point in currentStroke) {
-        print('🖊️ 좌표: (\${point.offset.dx.toStringAsFixed(2)}, \${point.offset.dy.toStringAsFixed(2)}) 굵기: \${point.strokeWidth.toStringAsFixed(2)}');
-      }
-
       currentStroke = [];
     }
   }
@@ -146,9 +142,21 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
     final local = _toLocal(position);
     const double eraseRadius = 20.0;
 
+    final toBeErased = strokes.firstWhere(
+          (stroke) => stroke.any((point) => (point.offset - local).distance <= eraseRadius),
+      orElse: () => [],
+    );
+
+    if (toBeErased.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
+    }
+
     setState(() {
       strokes.removeWhere((stroke) {
         return stroke.any((point) => (point.offset - local).distance <= eraseRadius);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) => (point.offset - local).distance <= eraseRadius);
       });
     });
 
@@ -160,13 +168,52 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
     _restartDebounceTimer();
   }
 
+  void _triggerFlash() {
+    _buttonFlash = true;
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        setState(() {
+          _buttonFlash = false;
+        });
+      }
+    });
+  }
+
+  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
+              blurRadius: 10,
+              offset: const Offset(2, 4),
+            ),
+          ],
+        ),
+        child: Opacity(
+          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
+          child: Image.asset(
+            assetPath,
+            width: 60,
+            height: 60,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
     final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
+    final canvasHeight = canvasWidth * (297 / 210);
 
     return Scaffold(
       body: Stack(
@@ -243,7 +290,10 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
             left: 60,
             right: 60,
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                final allJsonData = data.map((stroke) => stroke.toJson()).toList();
+                final finalJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
+                ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => TreeQuestionPage()),
@@ -261,53 +311,6 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
       ),
     );
   }
-
-  void _triggerFlash() {
-    _buttonFlash = true;
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
-        setState(() {
-          _buttonFlash = false;
-        });
-      }
-    });
-  }
-
-  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
-          boxShadow: [
-            BoxShadow(
-              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
-              blurRadius: 10,
-              offset: const Offset(2, 4),
-            ),
-          ],
-        ),
-        child: Opacity(
-          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
-          child: Image.asset(
-            assetPath,
-            width: 60,
-            height: 60,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class StrokePoint {
-  final Offset offset;
-  final Color color;
-  final double strokeWidth;
-
-  StrokePoint({required this.offset, required this.color, required this.strokeWidth});
 }
 
 class StrokePainter extends CustomPainter {

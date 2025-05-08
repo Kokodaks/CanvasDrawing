@@ -1,13 +1,12 @@
-// ... 기존 import 유지 ...
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import '../question/tree_question_page.dart';
 import '../drawing/stroke_point.dart';
+import '../drawing/stroke_data.dart';
+import '../services/api_service.dart';
 
 class MenDrawingPage extends StatefulWidget {
   final VoidCallback onDrawingComplete;
@@ -34,6 +33,10 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   bool _buttonFlash = false;
 
   double _accumulatedLength = 0.0;
+  List<StrokeData> data = [];
+  List<StrokeData> finalDrawingDataOnly = [];
+  int strokeOrder = 0;
+  int strokeStartTime = 0;
 
   @override
   void dispose() {
@@ -54,9 +57,8 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
-
       final directory = Directory.systemTemp;
-      final path = '${directory.path}/Men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final path = '${directory.path}/men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       await File(path).writeAsBytes(pngBytes);
       print("✅ 저장 완료: $path");
     } catch (e) {
@@ -67,11 +69,15 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   void _startStroke(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+    int t = DateTime.now().millisecondsSinceEpoch;
+    strokeStartTime = t;
+    strokeOrder++;
     currentStroke = [
       StrokePoint(
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: t,
       )
     ];
     if (_modeJustChanged) {
@@ -84,9 +90,10 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   void _addPoint(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
+    int t = DateTime.now().millisecondsSinceEpoch;
 
     if (currentStroke.isNotEmpty) {
-      final Offset last = currentStroke.last.offset;
+      Offset last = currentStroke.last.offset!;
       _accumulatedLength += (local - last).distance;
     }
 
@@ -95,6 +102,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: t,
       ),
     );
 
@@ -108,15 +116,9 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
 
   void _endStroke() {
     if (currentStroke.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
       strokes.add(currentStroke);
-
-      // 좌표 콘솔 출력 추가
-      print("🖊️ Stroke ${strokes.length} 좌표:");
-      for (final pt in currentStroke) {
-        final json = pt.toJson();
-        print("x: ${json['x']}, y: ${json['y']}, width: ${json['strokeWidth']}");
-      }
-
       currentStroke = [];
     }
   }
@@ -136,19 +138,28 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return false;
     final local = box.globalToLocal(globalPosition);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= box.size.width &&
-        local.dy <= box.size.height;
+    return local.dx >= 0 && local.dy >= 0 && local.dx <= box.size.width && local.dy <= box.size.height;
   }
 
   void _eraseStrokeAtPosition(Offset position) {
     final local = _toLocal(position);
     const double eraseRadius = 20.0;
 
+    final toBeErased = strokes.firstWhere(
+          (stroke) => stroke.any((point) => (point.offset! - local).distance <= eraseRadius),
+      orElse: () => [],
+    );
+
+    if (toBeErased.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
+    }
+
     setState(() {
       strokes.removeWhere((stroke) {
-        return stroke.any((point) => (point.offset - local).distance <= eraseRadius);
+        return stroke.any((point) => (point.offset! - local).distance <= eraseRadius);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) => (point.offset! - local).distance <= eraseRadius);
       });
     });
 
@@ -158,108 +169,6 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     }
 
     _restartDebounceTimer();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-
-    final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
-
-    return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Image.asset('assets/Men_drawing_bg.png', fit: BoxFit.cover),
-          ),
-
-          Center(
-            child: RepaintBoundary(
-              key: _repaintKey,
-              child: Listener(
-                onPointerDown: (event) {
-                  if (isErasing) {
-                    _eraseStrokeAtPosition(event.position);
-                  } else {
-                    setState(() => _startStroke(event.position, event.pressure));
-                  }
-                },
-                onPointerMove: (event) {
-                  if (!isErasing) {
-                    setState(() => _addPoint(event.position, event.pressure));
-                  }
-                },
-                onPointerUp: (_) {
-                  if (!isErasing) {
-                    setState(() => _endStroke());
-                  }
-                },
-                child: Container(
-                  key: _canvasKey,
-                  width: canvasWidth,
-                  height: canvasHeight,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.orange, width: 3),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: CustomPaint(
-                      painter: StrokePainter(strokes, currentStroke),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          Positioned(
-            right: 32,
-            top: screenHeight / 2 - 80,
-            child: Column(
-              children: [
-                _buildToolButton('assets/pencil.png', () {
-                  setState(() {
-                    isErasing = false;
-                    selectedColor = Colors.black;
-                    _modeJustChanged = true;
-                    _triggerFlash();
-                  });
-                }, !isErasing),
-                const SizedBox(height: 24),
-                _buildToolButton('assets/eraser.png', () {
-                  setState(() {
-                    isErasing = true;
-                    _modeJustChanged = true;
-                    _triggerFlash();
-                  });
-                }, isErasing),
-              ],
-            ),
-          ),
-
-          Positioned(
-            bottom: 40,
-            left: 60,
-            right: 60,
-            child: ElevatedButton(
-              onPressed: () {
-                widget.onDrawingComplete();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: const Text('다 그렸어!', style: TextStyle(fontSize: 18, color: Colors.white)),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _triggerFlash() {
@@ -300,21 +209,108 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
       ),
     );
   }
-}
 
-class StrokePoint {
-  final Offset offset;
-  final Color color;
-  final double strokeWidth;
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
 
-  StrokePoint({required this.offset, required this.color, required this.strokeWidth});
+    final canvasWidth = screenWidth * 0.65;
+    final canvasHeight = canvasWidth * (297 / 210);
 
-  Map<String, dynamic> toJson() => {
-    'x': offset.dx,
-    'y': offset.dy,
-    'color': color.value,
-    'strokeWidth': strokeWidth,
-  };
+    return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset('assets/Men_drawing_bg.png', fit: BoxFit.cover),
+          ),
+          Center(
+            child: RepaintBoundary(
+              key: _repaintKey,
+              child: Listener(
+                onPointerDown: (event) {
+                  if (isErasing) {
+                    _eraseStrokeAtPosition(event.position);
+                  } else {
+                    setState(() => _startStroke(event.position, event.pressure));
+                  }
+                },
+                onPointerMove: (event) {
+                  if (!isErasing) {
+                    setState(() => _addPoint(event.position, event.pressure));
+                  }
+                },
+                onPointerUp: (_) {
+                  if (!isErasing) {
+                    setState(() => _endStroke());
+                  }
+                },
+                child: Container(
+                  key: _canvasKey,
+                  width: canvasWidth,
+                  height: canvasHeight,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.orange, width: 3),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: CustomPaint(
+                      painter: StrokePainter(strokes, currentStroke),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 32,
+            top: screenHeight / 2 - 80,
+            child: Column(
+              children: [
+                _buildToolButton('assets/pencil.png', () {
+                  setState(() {
+                    isErasing = false;
+                    selectedColor = Colors.black;
+                    _modeJustChanged = true;
+                    _triggerFlash();
+                  });
+                }, !isErasing),
+                const SizedBox(height: 24),
+                _buildToolButton('assets/eraser.png', () {
+                  setState(() {
+                    isErasing = true;
+                    _modeJustChanged = true;
+                    _triggerFlash();
+                  });
+                }, isErasing),
+              ],
+            ),
+          ),
+          Positioned(
+            bottom: 40,
+            left: 60,
+            right: 60,
+            child: ElevatedButton(
+              onPressed: () async {
+                final allJsonData = data.map((stroke) => stroke.toJson()).toList();
+                final finalJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
+                ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
+                widget.onDrawingComplete();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: const Text('다 그렸어!', style: TextStyle(fontSize: 18, color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class StrokePainter extends CustomPainter {
@@ -333,7 +329,7 @@ class StrokePainter extends CustomPainter {
           ..color = p1.color
           ..strokeWidth = p1.strokeWidth
           ..strokeCap = StrokeCap.round;
-        canvas.drawLine(p1.offset, p2.offset, paint);
+        canvas.drawLine(p1.offset!, p2.offset!, paint);
       }
     }
   }

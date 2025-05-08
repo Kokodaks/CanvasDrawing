@@ -21,12 +21,6 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
   late final List<String> questions;
   int currentQuestion = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    questions = widget.isMan ? _manQuestions : _womanQuestions;
-  }
-
   final List<String> _manQuestions = [
     "1. 이 남자는 어떤 일을 하나요?",
     "2. 그는 어디에 살고 있나요?",
@@ -47,6 +41,12 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
     "7. 그녀는 어떤 옷을 입고 있나요?",
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    questions = widget.isMan ? _manQuestions : _womanQuestions;
+  }
+
   void _nextQuestionOrSubmit() {
     if (currentQuestion < questions.length - 1) {
       setState(() {
@@ -56,7 +56,6 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
       for (int i = 0; i < questions.length; i++) {
         debugPrint("${questions[i]} → ${controllers[i].text}");
       }
-
       widget.onQuestionComplete();
     }
   }
@@ -71,9 +70,6 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
-
     return Scaffold(
       body: Stack(
         children: [
@@ -85,76 +81,82 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
             ),
           ),
 
-          // 질문 구름
-          Positioned(
-            top: screenHeight * 0.12,
-            left: screenWidth * 0.07,
-            right: screenWidth * 0.07,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Image.asset('assets/Cloud.png'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    questions[currentQuestion],
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // 텍스트 입력 박스 (네모)
-          Positioned(
-            top: screenHeight * 0.72,
-            left: screenWidth * 0.07,
-            right: screenWidth * 0.07,
-            child: Stack(
-              children: [
-                Image.asset(
-                  'assets/Rectangle.png',
-                  width: screenWidth * 0.85,
-                ),
-                Positioned.fill(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: TextField(
-                      controller: controllers[currentQuestion],
-                      maxLines: null,
-                      style: const TextStyle(fontSize: 16),
-                      decoration: const InputDecoration(
-                        hintText: "아이의 대답을 입력해주세요",
-                        border: InputBorder.none,
+          // 질문 구름 + 텍스트
+          Align(
+            alignment: const Alignment(0, -0.75),
+            child: FractionallySizedBox(
+              widthFactor: 0.8,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Image.asset('assets/Cloud.png'),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Text(
+                      questions[currentQuestion],
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 25,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ),
+          ),
+
+          // 텍스트 입력 박스
+          Align(
+            alignment: const Alignment(0, 0.3),
+            child: FractionallySizedBox(
+              widthFactor: 0.9,
+              child: Stack(
+                children: [
+                  Image.asset('assets/Rectangle.png'),
+                  Positioned.fill(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: TextField(
+                        controller: controllers[currentQuestion],
+                        maxLines: null,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 30),
+                        decoration: const InputDecoration(
+                          hintText: "아이의 대답을 입력해주세요",
+                          hintStyle: TextStyle(fontSize: 30, color: Colors.grey),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
           // 다음 버튼
-          Positioned(
-            bottom: 40,
-            left: 24,
-            right: 24,
-            child: ElevatedButton(
-              onPressed: _nextQuestionOrSubmit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00796B),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+          Align(
+            alignment: const Alignment(0, 0.9),
+            child: FractionallySizedBox(
+              widthFactor: 0.9,
+              child: ElevatedButton(
+                onPressed: _nextQuestionOrSubmit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00796B),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+                child: Text(
+                  currentQuestion < questions.length - 1
+                      ? "다음으로 ➡️"
+                      : "제출하기 ✅",
                 ),
               ),
-              child: Text(currentQuestion < questions.length - 1 ? "다음으로 ➡️" : "제출하기 ✅"),
             ),
           ),
         ],
