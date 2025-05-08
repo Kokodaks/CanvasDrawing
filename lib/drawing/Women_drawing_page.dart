@@ -2,17 +2,21 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import '../question/tree_question_page.dart';
 import '../drawing/stroke_point.dart';
-import '../drawing/stroke_data.dart';
-import '../services/api_service.dart';
 
 class WomenDrawingPage extends StatefulWidget {
   final VoidCallback onDrawingComplete;
   final bool isMan;
 
-  const WomenDrawingPage({Key? key, required this.onDrawingComplete, required this.isMan}) : super(key: key);
+  const WomenDrawingPage({
+    Key? key,
+    required this.onDrawingComplete,
+    required this.isMan,
+  }) : super(key: key);
 
   @override
   _WomenDrawingPageState createState() => _WomenDrawingPageState();
@@ -33,10 +37,6 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
   bool _buttonFlash = false;
 
   double _accumulatedLength = 0.0;
-  List<StrokeData> data = [];
-  List<StrokeData> finalDrawingDataOnly = [];
-  int strokeOrder = 0;
-  int strokeStartTime = 0;
 
   @override
   void dispose() {
@@ -57,8 +57,9 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
+
       final directory = Directory.systemTemp;
-      final path = '${directory.path}/women_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final path = '${directory.path}/Women_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       await File(path).writeAsBytes(pngBytes);
       print("✅ 저장 완료: $path");
     } catch (e) {
@@ -69,15 +70,11 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
   void _startStroke(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
-    int t = DateTime.now().millisecondsSinceEpoch;
-    strokeStartTime = t;
-    strokeOrder++;
     currentStroke = [
       StrokePoint(
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
-        t: t,
       )
     ];
     if (_modeJustChanged) {
@@ -90,11 +87,15 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
   void _addPoint(Offset position, double pressure) {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
-    int t = DateTime.now().millisecondsSinceEpoch;
 
     if (currentStroke.isNotEmpty) {
-      Offset last = currentStroke.last.offset!;
+      Offset last = currentStroke.last.offset;
       _accumulatedLength += (local - last).distance;
+      if (_accumulatedLength > 500) {
+        _takeScreenshot();
+        _logCurrentStrokeCoordinates();
+        _accumulatedLength = 0.0;
+      }
     }
 
     currentStroke.add(
@@ -102,25 +103,28 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
         offset: local,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
-        t: t,
       ),
     );
-
-    if (_accumulatedLength > 500) {
-      _takeScreenshot();
-      _accumulatedLength = 0;
-    }
 
     _restartDebounceTimer();
   }
 
   void _endStroke() {
     if (currentStroke.isNotEmpty) {
-      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
-      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
       strokes.add(currentStroke);
+      _logStroke(currentStroke);
       currentStroke = [];
     }
+  }
+
+  void _logCurrentStrokeCoordinates() {
+    final coords = currentStroke.map((p) => '(${p.offset.dx.toStringAsFixed(1)}, ${p.offset.dy.toStringAsFixed(1)})').join(', ');
+    print('🖋️ 누적 500px 이후 stroke 좌표: [$coords]');
+  }
+
+  void _logStroke(List<StrokePoint> stroke) {
+    final coords = stroke.map((p) => '(${p.offset.dx.toStringAsFixed(1)}, ${p.offset.dy.toStringAsFixed(1)})').join(', ');
+    print('🖋️ 전체 stroke 완료 후 좌표: [$coords]');
   }
 
   double _calculateStrokeWidthFromPressure(double pressure) {
@@ -145,22 +149,8 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
     final local = _toLocal(position);
     const double eraseRadius = 20.0;
 
-    final toBeErased = strokes.firstWhere(
-          (stroke) => stroke.any((point) => (point.offset! - local).distance <= eraseRadius),
-      orElse: () => [],
-    );
-
-    if (toBeErased.isNotEmpty) {
-      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
-    }
-
     setState(() {
-      strokes.removeWhere((stroke) {
-        return stroke.any((point) => (point.offset! - local).distance <= eraseRadius);
-      });
-      finalDrawingDataOnly.removeWhere((strokeData) {
-        return strokeData.points.any((point) => (point.offset! - local).distance <= eraseRadius);
-      });
+      strokes.removeWhere((stroke) => stroke.any((point) => (point.offset - local).distance <= eraseRadius));
     });
 
     if (_modeJustChanged) {
@@ -171,50 +161,10 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
     _restartDebounceTimer();
   }
 
-  void _triggerFlash() {
-    _buttonFlash = true;
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
-        setState(() {
-          _buttonFlash = false;
-        });
-      }
-    });
-  }
-
-  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
-          boxShadow: [
-            BoxShadow(
-              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
-              blurRadius: 10,
-              offset: const Offset(2, 4),
-            ),
-          ],
-        ),
-        child: Opacity(
-          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
-          child: Image.asset(
-            assetPath,
-            width: 60,
-            height: 60,
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-
     final canvasWidth = screenWidth * 0.65;
     final canvasHeight = canvasWidth * (297 / 210);
 
@@ -293,12 +243,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
             left: 60,
             right: 60,
             child: ElevatedButton(
-              onPressed: () async {
-                final allJsonData = data.map((stroke) => stroke.toJson()).toList();
-                final finalJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
-                ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
-                widget.onDrawingComplete();
-              },
+              onPressed: () => widget.onDrawingComplete(),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -311,6 +256,49 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
       ),
     );
   }
+
+  void _triggerFlash() {
+    _buttonFlash = true;
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        setState(() {
+          _buttonFlash = false;
+        });
+      }
+    });
+  }
+
+  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
+              blurRadius: 10,
+              offset: const Offset(2, 4),
+            ),
+          ],
+        ),
+        child: Opacity(
+          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
+          child: Image.asset(assetPath, width: 60, height: 60),
+        ),
+      ),
+    );
+  }
+}
+
+class StrokePoint {
+  final Offset offset;
+  final Color color;
+  final double strokeWidth;
+
+  StrokePoint({required this.offset, required this.color, required this.strokeWidth});
 }
 
 class StrokePainter extends CustomPainter {
@@ -329,7 +317,7 @@ class StrokePainter extends CustomPainter {
           ..color = p1.color
           ..strokeWidth = p1.strokeWidth
           ..strokeCap = StrokeCap.round;
-        canvas.drawLine(p1.offset!, p2.offset!, paint);
+        canvas.drawLine(p1.offset, p2.offset, paint);
       }
     }
   }

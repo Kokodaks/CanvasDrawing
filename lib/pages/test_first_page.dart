@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../pages/PrivacyConsentPage.dart';
+import 'dart:ui' as ui;
 
 class TestFirstPage extends StatefulWidget {
   @override
@@ -29,13 +30,8 @@ class _TestFirstPageState extends State<TestFirstPage> {
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final baseWidth = 800.0; // 기준 너비
-    final baseHeight = 1280.0; // 기준 높이
-
-    final widthScale = screenSize.width / baseWidth;
-    final heightScale = screenSize.height / baseHeight;
-    final scale = widthScale < heightScale ? widthScale : heightScale;
+    double screenWidth = MediaQuery.of(context).size.width;
+    double horizontalPadding = screenWidth > 600 ? 80 : 40;
 
     return Scaffold(
       body: Container(
@@ -45,45 +41,48 @@ class _TestFirstPageState extends State<TestFirstPage> {
           image: DecorationImage(
             image: AssetImage('assets/login.png'),
             fit: BoxFit.cover,
+            alignment: Alignment.center,
           ),
         ),
         child: Center(
-          child: Transform.scale(
-            scale: scale,
-            child: SizedBox(
-              width: 320, // 고정된 기준 박스
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 64), // 상단 여백
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 300),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 32), // 로고 제거 후 여백만 유지
 
-                  const Text(
-                    '피검사자 정보 입력',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 30),
-
-                  _buildTextField(controller: nameController, hint: '이름'),
-                  const SizedBox(height: 16),
-                  _buildTextField(controller: rrnController, hint: '생년월일'),
-                  const SizedBox(height: 30),
-
-                  SizedBox(
-                    height: 48,
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: submitInfo,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFFA726),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                      ),
-                      child: const Text("로그인", style: TextStyle(fontSize: 16)),
+                    const Text(
+                      '피검사자 정보 입력',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 30),
+
+                    _buildTextField(controller: nameController, hint: '이름'),
+                    const SizedBox(height: 12),
+                    _buildTextField(controller: rrnController, hint: '생년월일'),
+                    const SizedBox(height: 30),
+
+                    SizedBox(
+                      height: 44,
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: submitInfo,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFFA726),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        child: const Text("로그인", style: TextStyle(fontSize: 15)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -98,7 +97,6 @@ class _TestFirstPageState extends State<TestFirstPage> {
   }) {
     return TextField(
       controller: controller,
-      style: const TextStyle(fontSize: 16),
       decoration: InputDecoration(
         hintText: hint,
         filled: true,
