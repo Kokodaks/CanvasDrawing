@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:collection/collection.dart';
 import '../question/house_question_page.dart';
 import '../drawing/stroke_point.dart';
 import '../drawing/stroke_data.dart';
@@ -30,6 +28,11 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   bool _buttonFlash = false;
 
   double _accumulatedLength = 0.0;
+
+  List<StrokeData> data = [];
+  List<StrokeData> finalDrawingDataOnly = [];
+  int strokeOrder = 0;
+  int strokeStartTime = 0;
 
   @override
   void dispose() {
@@ -63,6 +66,8 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
     int t = DateTime.now().millisecondsSinceEpoch;
+    strokeStartTime = t;
+    strokeOrder++;
     currentStroke = [
       StrokePoint(
         offset: local,
@@ -88,10 +93,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       _accumulatedLength += (local - last).distance;
       if (_accumulatedLength > 500) {
         _takeScreenshot();
-        print('📏 누적 길이 초과: 500px. 현재 stroke 좌표:');
-        for (final point in currentStroke) {
-          print('🖊️ 좌표: (${point.offset.dx.toStringAsFixed(2)}, ${point.offset.dy.toStringAsFixed(2)}) 굵기: ${point.strokeWidth.toStringAsFixed(2)}');
-        }
         _accumulatedLength = 0;
       }
     }
@@ -110,11 +111,9 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
   void _endStroke() {
     if (currentStroke.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
       strokes.add(currentStroke);
-      print('✏️ Stroke 완료. 총 ${currentStroke.length}개 점');
-      for (final point in currentStroke) {
-        print('🖊️ 좌표: (${point.offset.dx.toStringAsFixed(2)}, ${point.offset.dy.toStringAsFixed(2)}) 굵기: ${point.strokeWidth.toStringAsFixed(2)}');
-      }
       currentStroke = [];
     }
   }
@@ -144,9 +143,21 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     final local = _toLocal(position);
     const double eraseRadius = 20.0;
 
+    final toBeErased = strokes.firstWhere(
+          (stroke) => stroke.any((point) => (point.offset - local).distance <= eraseRadius),
+      orElse: () => [],
+    );
+
+    if (toBeErased.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
+    }
+
     setState(() {
       strokes.removeWhere((stroke) {
         return stroke.any((point) => (point.offset - local).distance <= eraseRadius);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) => (point.offset - local).distance <= eraseRadius);
       });
     });
 
@@ -156,6 +167,45 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     }
 
     _restartDebounceTimer();
+  }
+
+  void _triggerFlash() {
+    _buttonFlash = true;
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        setState(() {
+          _buttonFlash = false;
+        });
+      }
+    });
+  }
+
+  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
+              blurRadius: 10,
+              offset: const Offset(2, 4),
+            ),
+          ],
+        ),
+        child: Opacity(
+          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
+          child: Image.asset(
+            assetPath,
+            width: 60,
+            height: 60,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -241,7 +291,10 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
             left: 60,
             right: 60,
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                final allJsonData = data.map((stroke) => stroke.toJson()).toList();
+                final finalJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
+                ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => HouseQuestionPage()),
@@ -256,45 +309,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _triggerFlash() {
-    _buttonFlash = true;
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
-        setState(() {
-          _buttonFlash = false;
-        });
-      }
-    });
-  }
-
-  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
-          boxShadow: [
-            BoxShadow(
-              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
-              blurRadius: 10,
-              offset: const Offset(2, 4),
-            ),
-          ],
-        ),
-        child: Opacity(
-          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
-          child: Image.asset(
-            assetPath,
-            width: 60,
-            height: 60,
-          ),
-        ),
       ),
     );
   }

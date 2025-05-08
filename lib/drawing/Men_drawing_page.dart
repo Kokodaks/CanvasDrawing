@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import '../question/tree_question_page.dart';
 import '../drawing/stroke_point.dart';
+import '../drawing/stroke_data.dart';
+import '../services/api_service.dart';
 
 class MenDrawingPage extends StatefulWidget {
   final VoidCallback onDrawingComplete;
@@ -33,6 +33,10 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   bool _buttonFlash = false;
 
   double _accumulatedLength = 0.0;
+  List<StrokeData> data = [];
+  List<StrokeData> finalDrawingDataOnly = [];
+  int strokeOrder = 0;
+  int strokeStartTime = 0;
 
   @override
   void dispose() {
@@ -53,9 +57,8 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
       ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
-
       final directory = Directory.systemTemp;
-      final path = '${directory.path}/Men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final path = '${directory.path}/men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       await File(path).writeAsBytes(pngBytes);
       print("✅ 저장 완료: $path");
     } catch (e) {
@@ -67,6 +70,8 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     if (!_isInDrawingArea(position)) return;
     Offset local = _toLocal(position);
     int t = DateTime.now().millisecondsSinceEpoch;
+    strokeStartTime = t;
+    strokeOrder++;
     currentStroke = [
       StrokePoint(
         offset: local,
@@ -111,14 +116,9 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
 
   void _endStroke() {
     if (currentStroke.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
       strokes.add(currentStroke);
-
-      print("🖊️ Stroke ${strokes.length} 좌표:");
-      for (final pt in currentStroke) {
-        final json = pt.toJson();
-        print("x: ${json['x']}, y: ${json['y']}, width: ${json['p']}");
-      }
-
       currentStroke = [];
     }
   }
@@ -138,19 +138,28 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return false;
     final local = box.globalToLocal(globalPosition);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= box.size.width &&
-        local.dy <= box.size.height;
+    return local.dx >= 0 && local.dy >= 0 && local.dx <= box.size.width && local.dy <= box.size.height;
   }
 
   void _eraseStrokeAtPosition(Offset position) {
     final local = _toLocal(position);
     const double eraseRadius = 20.0;
 
+    final toBeErased = strokes.firstWhere(
+          (stroke) => stroke.any((point) => (point.offset! - local).distance <= eraseRadius),
+      orElse: () => [],
+    );
+
+    if (toBeErased.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
+    }
+
     setState(() {
       strokes.removeWhere((stroke) {
         return stroke.any((point) => (point.offset! - local).distance <= eraseRadius);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) => (point.offset! - local).distance <= eraseRadius);
       });
     });
 
@@ -160,6 +169,45 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     }
 
     _restartDebounceTimer();
+  }
+
+  void _triggerFlash() {
+    _buttonFlash = true;
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        setState(() {
+          _buttonFlash = false;
+        });
+      }
+    });
+  }
+
+  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
+              blurRadius: 10,
+              offset: const Offset(2, 4),
+            ),
+          ],
+        ),
+        child: Opacity(
+          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
+          child: Image.asset(
+            assetPath,
+            width: 60,
+            height: 60,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -245,7 +293,10 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
             left: 60,
             right: 60,
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                final allJsonData = data.map((stroke) => stroke.toJson()).toList();
+                final finalJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
+                ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
                 widget.onDrawingComplete();
               },
               style: ElevatedButton.styleFrom(
@@ -257,45 +308,6 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _triggerFlash() {
-    _buttonFlash = true;
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
-        setState(() {
-          _buttonFlash = false;
-        });
-      }
-    });
-  }
-
-  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
-          boxShadow: [
-            BoxShadow(
-              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
-              blurRadius: 10,
-              offset: const Offset(2, 4),
-            ),
-          ],
-        ),
-        child: Opacity(
-          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
-          child: Image.asset(
-            assetPath,
-            width: 60,
-            height: 60,
-          ),
-        ),
       ),
     );
   }
