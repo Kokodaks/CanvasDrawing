@@ -84,8 +84,8 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
   void endStroke() {
     if (currentStroke.isNotEmpty) {
-      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke));
-      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke));
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
 
       strokes.add(currentStroke);
       currentStroke = [];
@@ -105,7 +105,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     });
 
     if(toBeErased != null){
-      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased));
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
     }
 
     setState(() {
@@ -319,10 +319,11 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
       child: ElevatedButton(
         onPressed: () async {
+
           final allJsonData = data.map((stroke) => stroke.toJson()).toList();
-          final finalDrawingJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
-          final result = await ApiService.sendAllStrokes(allJsonData, finalDrawingJsonData);
-          debugPrint(result);
+          final finalJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
+          ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
+
 
           Navigator.push(
             context,
