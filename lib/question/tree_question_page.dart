@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../pages/Person_IntroPage.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import '../pages/person_IntroPage.dart';
 
 class TreeQuestionPage extends StatefulWidget {
   @override
@@ -7,9 +8,7 @@ class TreeQuestionPage extends StatefulWidget {
 }
 
 class _TreeQuestionPageState extends State<TreeQuestionPage> {
-  final List<TextEditingController> controllers =
-  List.generate(7, (_) => TextEditingController());
-
+  final List<TextEditingController> controllers = List.generate(7, (_) => TextEditingController());
   final List<String> questions = [
     "1. 이 나무의 종류는 무엇인가요?",
     "2. 이 나무는 몇 살인가요?",
@@ -21,6 +20,51 @@ class _TreeQuestionPageState extends State<TreeQuestionPage> {
   ];
 
   int currentQuestion = 0;
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _speech = stt.SpeechToText();
+    _initializeSpeechRecognition();
+  }
+
+  void _initializeSpeechRecognition() async {
+    bool available = await _speech.initialize(
+      onStatus: (status) => print('상태: $status'),
+      onError: (error) => print('오류: $error'),
+    );
+    setState(() {
+      _isInitialized = available;
+    });
+  }
+
+  void _listen() async {
+    if (!_isListening && _isInitialized) {
+      await _speech.cancel();
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      setState(() {
+        _isListening = true;
+        controllers[currentQuestion].clear();
+      });
+
+      _speech.listen(
+        localeId: 'ko_KR',
+        listenMode: stt.ListenMode.dictation,
+        onResult: (result) {
+          setState(() {
+            controllers[currentQuestion].text = result.recognizedWords;
+          });
+        },
+      );
+    } else {
+      await _speech.stop();
+      setState(() => _isListening = false);
+    }
+  }
 
   void _nextQuestionOrSubmit() {
     if (currentQuestion < questions.length - 1) {
@@ -44,6 +88,7 @@ class _TreeQuestionPageState extends State<TreeQuestionPage> {
     for (var controller in controllers) {
       controller.dispose();
     }
+    _speech.stop();
     super.dispose();
   }
 
@@ -52,17 +97,11 @@ class _TreeQuestionPageState extends State<TreeQuestionPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // 배경 이미지
           Positioned.fill(
-            child: Image.asset(
-              'assets/Question_bg.png',
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset('assets/Question_bg.png', fit: BoxFit.cover),
           ),
-
-          // 질문 구름 + 텍스트
           Align(
-            alignment: const Alignment(0, -0.75), // 위쪽에 고정
+            alignment: const Alignment(0, -0.75),
             child: FractionallySizedBox(
               widthFactor: 0.8,
               child: Stack(
@@ -85,10 +124,8 @@ class _TreeQuestionPageState extends State<TreeQuestionPage> {
               ),
             ),
           ),
-
-          // 텍스트 입력 박스
           Align(
-            alignment: const Alignment(0, 0.3), // 중간 아래쪽
+            alignment: const Alignment(0, 0.3),
             child: FractionallySizedBox(
               widthFactor: 0.9,
               child: Stack(
@@ -102,6 +139,7 @@ class _TreeQuestionPageState extends State<TreeQuestionPage> {
                         maxLines: null,
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontSize: 30),
+                        enabled: !_isListening,
                         decoration: const InputDecoration(
                           hintText: "아이의 대답을 입력해주세요",
                           hintStyle: TextStyle(
@@ -117,10 +155,67 @@ class _TreeQuestionPageState extends State<TreeQuestionPage> {
               ),
             ),
           ),
-
-          // 다음 버튼
           Align(
-            alignment: const Alignment(0, 0.9), // 하단
+            alignment: const Alignment(0, 0.65),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Image.asset(
+                        'assets/mic_bg.png',
+                        width: 80,
+                        height: 80,
+                      ),
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _isListening ? Colors.green : Colors.transparent,
+                            width: 4,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10.0),
+                          child: GestureDetector(
+                            onTap: _isInitialized ? _listen : null,
+                            child: Image.asset(
+                              'assets/mic.png',
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 30),
+                GestureDetector(
+                  onTap: !_isListening
+                      ? () {
+                    setState(() {
+                      controllers[currentQuestion].clear();
+                    });
+                  }
+                      : null,
+                  child: SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: Image.asset(
+                      'assets/reset_icon.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Align(
+            alignment: const Alignment(0, 0.9),
             child: FractionallySizedBox(
               widthFactor: 0.9,
               child: ElevatedButton(

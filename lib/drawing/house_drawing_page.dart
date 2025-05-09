@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:collection/collection.dart';
+import 'package:path_provider/path_provider.dart';
 import '../question/house_question_page.dart';
 import '../drawing/stroke_point.dart';
 import '../drawing/stroke_data.dart';
@@ -19,6 +20,13 @@ class HouseDrawingPage extends StatefulWidget {
 class _HouseDrawingPageState extends State<HouseDrawingPage> {
   List<List<StrokePoint>> strokes = [];
   List<StrokePoint> currentStroke = [];
+  double eraserSize = 20.0;
+
+  List<StrokeData> data = [];
+  List<StrokeData> finalDrawingDataOnly = [];
+
+  int strokeStartTime = 0;
+  int strokeOrder = 0;
 
   bool isErasing = false;
   Color selectedColor = Colors.black;
@@ -28,7 +36,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
   Timer? _debounceTimer;
   bool _modeJustChanged = false;
-  bool _buttonFlash = false;
 
   double _accumulatedLength = 0.0;
 
@@ -38,87 +45,116 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     super.dispose();
   }
 
-  void _restartDebounceTimer() {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 5), () async {
-      if (mounted) await _takeScreenshot();
-    });
-  }
-
-  Future<void> _takeScreenshot() async {
-    try {
-      RenderRepaintBoundary boundary =
-      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
-
-      final directory = Directory.systemTemp;
-      final path = '${directory.path}/house_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
-      await File(path).writeAsBytes(pngBytes);
-      print("✅ 저장 완료: $path");
-    } catch (e) {
-      print("❌ 스크린샷 실패: $e");
-    }
-  }
-
-  void _startStroke(Offset position, double pressure) {
-    if (!_isInDrawingArea(position)) return;
-    Offset local = _toLocal(position);
-    int t = DateTime.now().millisecondsSinceEpoch;
+  void startNewStroke(Offset globalPosition, int time, double pressure) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);  // 글로벌 좌표를 로컬 좌표로 변환
     currentStroke = [
       StrokePoint(
-        offset: local,
+        offset: position,
         color: selectedColor,
         strokeWidth: _calculateStrokeWidthFromPressure(pressure),
-        t: t,
+        t: time,
       )
     ];
-    if (_modeJustChanged) {
-      _takeScreenshot();
+    if (_modeJustChanged && !isErasing) {
+      _takeScreenshotDirectly();
       _modeJustChanged = false;
     }
     _restartDebounceTimer();
   }
 
-  void _addPoint(Offset position, double pressure) {
-    if (!_isInDrawingArea(position)) return;
-    Offset local = _toLocal(position);
-    int t = DateTime.now().millisecondsSinceEpoch;
+
+  void addPointToStroke(Offset globalPosition, int time, double pressure) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);  // 글로벌 좌표를 로컬 좌표로 변환
+    final width = _calculateStrokeWidthFromPressure(pressure);
 
     if (currentStroke.isNotEmpty) {
-      Offset last = currentStroke.last.offset;
-      _accumulatedLength += (local - last).distance;
-      if (_accumulatedLength > 500) {
-        _takeScreenshot();
-        print('📏 누적 길이 초과: 500px. 현재 stroke 좌표:');
-        for (final point in currentStroke) {
-          print('🖊️ 좌표: (${point.offset.dx.toStringAsFixed(2)}, ${point.offset.dy.toStringAsFixed(2)}) 굵기: ${point.strokeWidth.toStringAsFixed(2)}');
-        }
-        _accumulatedLength = 0;
-      }
+      final prev = currentStroke.last.offset!;
+      _accumulatedLength += (position - prev).distance;
     }
 
     currentStroke.add(
       StrokePoint(
-        offset: local,
-        color: selectedColor,
-        strokeWidth: _calculateStrokeWidthFromPressure(pressure),
-        t: t,
+          offset: position,
+          color: selectedColor,
+          strokeWidth: width,
+          t: time
       ),
     );
+
+    _handleLengthBasedCapture();
+    _restartDebounceTimer();
+  }
+
+
+  void _endStroke() {
+    if (currentStroke.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+      finalDrawingDataOnly.add(data.last);
+
+      strokes.add(currentStroke);
+      currentStroke = [];
+    }
+  }
+
+  void eraseStrokeAt(Offset globalTapPosition) {
+    if (!_isInCanvas(globalTapPosition)) return;
+    final tapPosition = _toLocal(globalTapPosition);  // 글로벌 좌표를 로컬 좌표로 변환
+
+    int beforeCount = strokes.length;
+
+    final toBeErased = strokes.firstWhereOrNull((stroke) {
+      return stroke.any((point) =>
+      point.offset != null &&
+          (point.offset! - tapPosition).distance <= eraserSize);
+    });
+
+    if(toBeErased != null){
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
+    }
+
+    setState(() {
+      strokes.removeWhere((stroke) {
+        return stroke.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+    });
+
+    int afterCount = strokes.length;
+
+    if (_modeJustChanged && isErasing && beforeCount > afterCount) {
+      _takeScreenshotDirectly();
+      _modeJustChanged = false;
+    }
 
     _restartDebounceTimer();
   }
 
-  void _endStroke() {
-    if (currentStroke.isNotEmpty) {
-      strokes.add(currentStroke);
-      print('✏️ Stroke 완료. 총 ${currentStroke.length}개 점');
-      for (final point in currentStroke) {
-        print('🖊️ 좌표: (${point.offset.dx.toStringAsFixed(2)}, ${point.offset.dy.toStringAsFixed(2)}) 굵기: ${point.strokeWidth.toStringAsFixed(2)}');
+
+
+  void _restartDebounceTimer() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(seconds: 5), () async {
+      if (mounted) {
+        if (strokes.isNotEmpty || currentStroke.isNotEmpty) {
+          await _takeScreenshotDirectly();
+        }
       }
-      currentStroke = [];
+    });
+  }
+
+
+  void _handleLengthBasedCapture() {
+    if (_accumulatedLength > 1000) {
+      _takeScreenshotDirectly();
+      _accumulatedLength = 0;
     }
   }
 
@@ -129,45 +165,87 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   }
 
   Offset _toLocal(Offset globalPosition) {
-    final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    return box?.globalToLocal(globalPosition) ?? Offset.zero;
+    final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return Offset.zero;
+    return renderBox.globalToLocal(globalPosition);  // 글로벌 좌표를 로컬 좌표로 변환
   }
 
-  bool _isInDrawingArea(Offset globalPosition) {
-    final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return false;
-    final local = box.globalToLocal(globalPosition);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= box.size.width &&
-        local.dy <= box.size.height;
+  bool _isInCanvas(Offset globalPosition) {
+    final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return false;
+    final localPosition = renderBox.globalToLocal(globalPosition);  // 글로벌 좌표를 로컬 좌표로 변환
+    return localPosition.dx >= 0 &&
+        localPosition.dy >= 0 &&
+        localPosition.dx <= renderBox.size.width &&
+        localPosition.dy <= renderBox.size.height;
   }
 
-  void _eraseStrokeAtPosition(Offset position) {
-    final local = _toLocal(position);
-    const double eraseRadius = 20.0;
+  Future<void> _takeScreenshotDirectly() async {
+    try {
+      RenderRepaintBoundary boundary =
+      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      Uint8List pngBytes = byteData!.buffer.asUint8List();
 
-    setState(() {
-      strokes.removeWhere((stroke) {
-        return stroke.any((point) => (point.offset - local).distance <= eraseRadius);
-      });
-    });
+      String path;
+      if (Platform.isAndroid) {
+        final directory = Directory('/storage/emulated/0/Download');
+        path = '${directory.path}/House_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      } else if (Platform.isIOS) {
+        final directory = await getApplicationDocumentsDirectory();
+        path = '${directory.path}/House_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      } else {
+        final directory = Directory('./');
+        path = '${directory.path}/House_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      }
 
-    if (_modeJustChanged) {
-      _takeScreenshot();
-      _modeJustChanged = false;
+      await File(path).writeAsBytes(pngBytes);
+      print("✅ 저장 완료: $path");
+    } catch (e) {
+      print("❌ 스크린샷 실패: $e");
     }
+  }
 
-    _restartDebounceTimer();
+  void _triggerFlash() {
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
+          boxShadow: [
+            BoxShadow(
+              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
+              blurRadius: 10,
+              offset: const Offset(2, 4),
+            ),
+          ],
+        ),
+        child: Image.asset(
+          assetPath,
+          width: 60,
+          height: 60,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-
+    final screenWidth = MediaQuery.of(context).size.width;
     final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210);
+    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
 
     return Scaffold(
       body: Stack(
@@ -177,42 +255,51 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
           ),
           Center(
             child: RepaintBoundary(
-              key: _repaintKey,
-              child: Listener(
-                onPointerDown: (event) {
-                  if (isErasing) {
-                    _eraseStrokeAtPosition(event.position);
-                  } else {
-                    setState(() => _startStroke(event.position, event.pressure));
-                  }
-                },
-                onPointerMove: (event) {
-                  if (!isErasing) {
-                    setState(() => _addPoint(event.position, event.pressure));
-                  }
-                },
-                onPointerUp: (_) {
-                  if (!isErasing) {
-                    setState(() => _endStroke());
-                  }
-                },
-                child: Container(
-                  key: _canvasKey,
-                  width: canvasWidth,
-                  height: canvasHeight,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.orange, width: 3),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: CustomPaint(
-                      painter: StrokePainter(strokes, currentStroke),
+                key: _repaintKey,
+                child:
+                Listener(
+                  onPointerDown: (PointerDownEvent event) {
+                    final position = event.position;
+                    strokeStartTime = DateTime.now().millisecondsSinceEpoch;
+                    strokeOrder++;
+
+                    if (isErasing) {
+                      eraseStrokeAt(position);
+                    } else {
+                      setState(() => startNewStroke(position, 0, event.pressure));
+                    }
+                  },
+                  onPointerMove: (PointerMoveEvent event) {
+                    final position = event.position;
+                    final currentTime = DateTime.now().millisecondsSinceEpoch;
+                    final t = currentTime - strokeStartTime;
+
+                    if (!isErasing) {
+                      setState(() => addPointToStroke(position, t, event.pressure));
+                    }
+                  },
+                  onPointerUp: (_) {
+                    if (!isErasing) {
+                      setState(() => _endStroke());
+                    }
+                  },
+                  child: Container(
+                    key: _canvasKey,
+                    width: canvasWidth,
+                    height: canvasHeight,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.orange, width: 3),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: CustomPaint(
+                        painter: StrokePainter(strokes, currentStroke),
+                      ),
                     ),
                   ),
-                ),
-              ),
+                )
             ),
           ),
           Positioned(
@@ -244,7 +331,17 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
             left: 60,
             right: 60,
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                // 스크린샷을 먼저 저장
+                await _takeScreenshotDirectly();
+
+                // JSON 데이터 보내기
+                final allJsonData = data.map((stroke) => stroke.toJson()).toList();
+                final finalJsonData =
+                finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
+                ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
+
+                // 그 후 화면 전환
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => HouseQuestionPage()),
@@ -262,50 +359,12 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       ),
     );
   }
-
-  void _triggerFlash() {
-    _buttonFlash = true;
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
-        setState(() {
-          _buttonFlash = false;
-        });
-      }
-    });
-  }
-
-  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
-          boxShadow: [
-            BoxShadow(
-              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
-              blurRadius: 10,
-              offset: const Offset(2, 4),
-            ),
-          ],
-        ),
-        child: Opacity(
-          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
-          child: Image.asset(
-            assetPath,
-            width: 60,
-            height: 60,
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;
+
 
   StrokePainter(this.strokes, this.currentStroke);
 
@@ -319,7 +378,7 @@ class StrokePainter extends CustomPainter {
           ..color = p1.color
           ..strokeWidth = p1.strokeWidth
           ..strokeCap = StrokeCap.round;
-        canvas.drawLine(p1.offset, p2.offset, paint);
+        canvas.drawLine(p1.offset!, p2.offset!, paint);
       }
     }
   }
