@@ -28,4 +28,16 @@ class StrokeData {
     "color": color.value.toRadixString(16),
     "points": points.map((p) => p.toJson()).toList(),
   };
+
+  Map<String, dynamic> toJsonOpenAi() =>{
+    "isErasing": isErasing,
+    "strokeOrder": strokeOrder,
+    "strokeStartTime": strokeStartTime,
+    "color": color.value.toRadixString(16),
+    "points": points.map((p) => {
+      "x": p.offset?.dx,
+      "y": p.offset?.dy
+    }).toList(),
+  };
+
 }

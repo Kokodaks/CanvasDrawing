@@ -92,12 +92,36 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     }
   }
 
+  // 변경 사항 : eraseStrokeAt 함수에서 지우기전, 지운 후 각각 takeScreenshotDirectly()를 호출해서 pngBytes 데이터를 서버에 보냄.
+  // eraseStrokeAt 내부 구조 이유로, _takeScreenshotDirectly()가 먼저 정의 되어 있도록 함
+  // 지구기 전, 지운 후 _takeScreenshotDirectly()가 호출되는 구조를 만들때 이 조치가 필요했음
+  Future<Uint8List?> _takeScreenshotDirectly() async {
+    try {
+      RenderRepaintBoundary boundary =
+      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      var image = await boundary.toImage(pixelRatio: 3.0);
+      ByteData? byteData = await image.toByteData(format: ImageByteFormat.png);
+      Uint8List pngBytes = byteData!.buffer.asUint8List();
+
+      final directory = Directory('/storage/emulated/0/Download');
+      final path =
+          '${directory.path}/capture_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File(path);
+      await file.writeAsBytes(pngBytes);
+
+      print('🖼️ 스크린샷 저장 완료: $path');
+      return pngBytes;
+    } catch (e) {
+      print('스크린샷 실패: $e');
+      return null;
+    }
+  }
+
   void eraseStrokeAt(Offset globalTapPosition) {
     if (!_isInCanvas(globalTapPosition)) return;
     final tapPosition = _toLocal(globalTapPosition);
 
     int beforeCount = strokes.length;
-
     final toBeErased = strokes.firstWhereOrNull((stroke) {
       return stroke.any((point) =>
       point.offset != null &&
@@ -123,10 +147,16 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
     int afterCount = strokes.length;
 
-    if (_modeJustChanged && isErasing && beforeCount > afterCount) {
-      _takeScreenshotDirectly();
-      _modeJustChanged = false;
-    }
+    _takeScreenshotDirectly().then((pngBefore) {
+      if(isErasing && beforeCount > afterCount){
+        _takeScreenshotDirectly().then((pngAfter) {
+          if (pngBefore != null && pngAfter != null) {
+            final allJsonData = data.map((stroke) => stroke.toJsonOpenAi()).toList();
+            ApiService.sendToOpenAi(pngBefore, pngAfter, allJsonData);
+          }
+        });
+      }
+    });
 
     _restartDebounceTimer();
   }
@@ -167,34 +197,11 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     }
   }
 
-
-
   double _calculateStrokeWidthFromPressure(double pressure) {
     const double minWidth = 2.0;
     const double maxWidth = 20.0;
     final p = pressure.clamp(0.0, 1.0);
     return minWidth + (maxWidth - minWidth) * p;
-  }
-
-
-  Future<void> _takeScreenshotDirectly() async {
-    try {
-      RenderRepaintBoundary boundary =
-      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      var image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ImageByteFormat.png);
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
-
-      final directory = Directory('/storage/emulated/0/Download');
-      final path =
-          '${directory.path}/capture_${DateTime.now().millisecondsSinceEpoch}.png';
-      final file = File(path);
-      await file.writeAsBytes(pngBytes);
-
-      print('🖼️ 스크린샷 저장 완료: $path');
-    } catch (e) {
-      print('스크린샷 실패: $e');
-    }
   }
 
   @override
@@ -324,6 +331,10 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
           final finalJsonData = finalDrawingDataOnly.map((stroke) => stroke.toJson()).toList();
           ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
 
+          final pngFinal = await _takeScreenshotDirectly();
+          if(pngFinal != null){
+            ApiService.sendFinalToOpenAi(pngFinal,finalJsonData);
+          }
 
           Navigator.push(
             context,
