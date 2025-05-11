@@ -332,8 +332,9 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
           ApiService.sendStrokesWithMulter(allJsonData, finalJsonData);
 
           final pngFinal = await _takeScreenshotDirectly();
+          final finalJsonOpenAi = finalDrawingDataOnly.map((stroke) => stroke.toJsonOpenAi()).toList();
           if(pngFinal != null){
-            ApiService.sendFinalToOpenAi(pngFinal,finalJsonData);
+            ApiService.sendFinalToOpenAi(pngFinal,finalJsonOpenAi);
           }
 
           Navigator.push(

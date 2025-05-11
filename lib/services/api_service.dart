@@ -46,11 +46,11 @@ class ApiService {
     print("응답: ${response.statusCode}");
   }
 
-  static Future<void> sendFinalToOpenAi(Uint8List pngFinal, List<Map<String, dynamic>> finalJsonData) async {
+  static Future<void> sendFinalToOpenAi(Uint8List pngFinal, List<Map<String, dynamic>> finalJsonOpenAi) async {
     final uri = Uri.parse('$_baseUrl/ai/sendFinalToOpenAi');
     final request = http.MultipartRequest("POST", uri);
 
-    final finalJsonDrawing = jsonEncode(finalJsonData);
+    final finalJsonDrawing = jsonEncode(finalJsonOpenAi);
     final finalDrawingBytes = utf8.encode(finalJsonDrawing);
 
     request.files.add(
