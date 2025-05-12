@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
-import '../pages/House_IntroPage.dart';
+import '../drawing/exercise_drawing_page.dart';
 
 class PrivacyConsentPage extends StatefulWidget {
+  final int testId;
+  final int childId;
+
+  const PrivacyConsentPage({
+    required this.testId,
+    required this.childId,
+    Key? key,
+  }) : super(key: key);
+
   @override
   _PrivacyConsentPageState createState() => _PrivacyConsentPageState();
 }
@@ -27,7 +36,7 @@ class _PrivacyConsentPageState extends State<PrivacyConsentPage> {
 
           // 체크박스 위치 조절
           Positioned(
-            top: screenHeight * 0.66,
+            top: screenHeight * 0.665,
             left: screenWidth * 0.38,
             child: Checkbox(
               value: isAgreed,
@@ -51,7 +60,10 @@ class _PrivacyConsentPageState extends State<PrivacyConsentPage> {
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => HouseIntroPage(),
+                        builder: (context) => ExerciseDrawingPage(
+                          testId: widget.testId,
+                          childId: widget.childId,
+                        ),
                       ),
                     );
                   }

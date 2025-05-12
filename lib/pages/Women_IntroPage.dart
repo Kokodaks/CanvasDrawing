@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 
 class WomenIntroPage extends StatelessWidget {
+  final int testId;
+  final int childId;
   final VoidCallback onStartDrawing;
 
-  const WomenIntroPage({Key? key, required this.onStartDrawing}) : super(key: key);
+  const WomenIntroPage({
+    required this.testId,
+    required this.childId,
+    required this.onStartDrawing,
+    Key? key,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {

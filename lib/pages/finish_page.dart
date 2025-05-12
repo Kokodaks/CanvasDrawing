@@ -1,11 +1,33 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 
 class FinishPage extends StatelessWidget {
-  const FinishPage({Key? key}) : super(key: key);
+  final int testId;
 
-  void _exitApp() {
-    SystemNavigator.pop(); // Android용 앱 종료
+  const FinishPage({Key? key, required this.testId}) : super(key: key);
+
+  Future<void> _markAsCompletedAndExit(BuildContext context) async {
+    try {
+      final uri = Uri.http('192.168.200.103:3000', '/test/markTestAsCompleted');
+
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'testid': testId}),
+      );
+
+      if (response.statusCode == 200) {
+        debugPrint("✅ 검사 완료 상태 전송 성공");
+      } else {
+        debugPrint("⚠️ 전송 실패: ${response.statusCode} ${response.body}");
+      }
+    } catch (e) {
+      debugPrint("❌ 예외 발생: $e");
+    } finally {
+      SystemNavigator.pop(); // 전송이 끝났든 아니든 종료
+    }
   }
 
   @override
@@ -32,7 +54,7 @@ class FinishPage extends StatelessWidget {
               child: SizedBox(
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _exitApp,
+                  onPressed: () => _markAsCompletedAndExit(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFFA726),
                     shape: RoundedRectangleBorder(

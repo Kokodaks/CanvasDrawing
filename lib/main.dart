@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/services.dart';
 import 'pages/test_first_page.dart';
-import 'tests/api_test.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +23,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Drawingi',
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        // 기본 테마 사용, 폰트 설정 제거됨
+      ),
       home: TestFirstPage(),
     );
   }

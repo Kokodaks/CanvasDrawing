@@ -1,13 +1,23 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:path_provider/path_provider.dart';
+import '../pages/Person_IntroPage.dart';
 
 class PersonQuestionPage extends StatefulWidget {
   final bool isMan;
   final VoidCallback onQuestionComplete;
+  final int testId;
+  final int childId;
 
   const PersonQuestionPage({
     Key? key,
     required this.isMan,
     required this.onQuestionComplete,
+    required this.testId,
+    required this.childId,
   }) : super(key: key);
 
   @override
@@ -15,8 +25,7 @@ class PersonQuestionPage extends StatefulWidget {
 }
 
 class _PersonQuestionPageState extends State<PersonQuestionPage> {
-  final List<TextEditingController> controllers =
-  List.generate(9, (_) => TextEditingController());
+  final List<TextEditingController> controllers = List.generate(7, (_) => TextEditingController());
 
   late final List<String> questions;
   int currentQuestion = 0;
@@ -44,44 +53,154 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
   @override
   void initState() {
     super.initState();
+    super.initState();
+    _speech = stt.SpeechToText();
+    _initializeSpeechRecognition();
     questions = widget.isMan ? _manQuestions : _womanQuestions;
   }
 
-  void _nextQuestionOrSubmit() {
+  Future<void> _submitAnswers() async {
+    final drawingType = widget.isMan ? "man" : "woman";
+
+    for (int i = 0; i < questions.length; i++) {
+      final uri = Uri.http('10.30.122.19:3000', '/test/addQnA');
+
+      try {
+        final response = await http.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'testId': widget.testId,
+            'drawingType': drawingType,
+            'question': questions[i],
+            'answer': controllers[i].text,
+          }),
+        );
+
+        debugPrint('📤 질문 ${i + 1} 전송 상태: ${response.statusCode}');
+        debugPrint('📦 응답 내용: ${response.body}');
+      } catch (e) {
+        debugPrint('🛑 질문 ${i + 1} 전송 중 예외 발생: $e');
+      }
+    }
+  }
+
+  Future<void> _nextQuestionOrSubmit() async {
     if (currentQuestion < questions.length - 1) {
       setState(() {
         currentQuestion++;
       });
     } else {
+      // 질문 및 답변 출력 (디버깅용)
       for (int i = 0; i < questions.length; i++) {
         debugPrint("${questions[i]} → ${controllers[i].text}");
       }
-      widget.onQuestionComplete();
+
+      await _submitAnswers();
+      widget.onQuestionComplete();  // 다음 단계로 넘어가기
     }
   }
+
+  Future<File?> _getLatestScreenshot() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final files = Directory(dir.path)
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.contains('House_drawing_') && f.path.endsWith('.png'))
+        .toList();
+
+    if (files.isEmpty) return null;
+
+    files.sort((a, b) => b.path.compareTo(a.path));
+    return files.first;
+  }
+
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+  bool _isInitialized = false;
+
+  void _initializeSpeechRecognition() async {
+    bool available = await _speech.initialize(
+      onStatus: (status) => print('🎙 상태: $status'),
+      onError: (error) => print('❌ 오류: $error'),
+    );
+    setState(() => _isInitialized = available);
+  }
+
+  void _listen() async {
+    if (!_isListening && _isInitialized) {
+      await _speech.cancel();
+      await Future.delayed(const Duration(milliseconds: 300));
+      setState(() => _isListening = true);
+
+      _speech.listen(
+        localeId: 'ko_KR',
+        listenMode: stt.ListenMode.dictation,
+        onResult: (result) {
+          setState(() {
+            controllers[currentQuestion].text = result.recognizedWords;
+          });
+        },
+      );
+    } else {
+      await _speech.stop();
+      setState(() => _isListening = false);
+    }
+  }
+
 
   @override
   void dispose() {
     for (var controller in controllers) {
       controller.dispose();
     }
+    _speech.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // 배경
           Positioned.fill(
-            child: Image.asset(
-              'assets/Question_bg.png',
-              fit: BoxFit.cover,
+            child: Image.asset('assets/Question_bg.png', fit: BoxFit.cover),
+          ),
+          // 미리보기 썸네일 버튼
+          Align(
+            alignment: const Alignment(-0.95, -0.95),
+            child: FutureBuilder<File?>(
+              future: _getLatestScreenshot(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const SizedBox();
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ScreenshotViewerPage(imageFile: snapshot.data!),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 60,
+                    height: 60,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 6)],
+                    ),
+                    child: ClipOval(
+                      child: Image.file(snapshot.data!, fit: BoxFit.cover),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-
-          // 질문 구름 + 텍스트
+          // 질문 및 입력 폼
           Align(
             alignment: const Alignment(0, -0.75),
             child: FractionallySizedBox(
@@ -89,25 +208,31 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Image.asset('assets/Cloud.png'),
+                  // 구름 이미지 크기 제한
+                  Image.asset(
+                    'assets/Cloud.png',
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                  ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20),
                     child: Text(
                       questions[currentQuestion],
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        fontSize: 25,
-                        fontWeight: FontWeight.bold,
+                        fontFamily: 'TJJoyofsingingEB_TTF',
+                        fontSize: 35,
+                        fontWeight: FontWeight.w900,
                         color: Colors.black87,
                       ),
+                      softWrap: true,
+                      overflow: TextOverflow.visible,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-
-          // 텍스트 입력 박스
           Align(
             alignment: const Alignment(0, 0.3),
             child: FractionallySizedBox(
@@ -135,8 +260,57 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
               ),
             ),
           ),
-
-          // 다음 버튼
+          // 음성 인식 및 리셋 아이콘
+          Align(
+            alignment: const Alignment(0, 0.65),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Image.asset('assets/mic_bg.png', width: 80, height: 80),
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _isListening ? Colors.green : Colors.transparent,
+                            width: 4,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10.0),
+                          child: GestureDetector(
+                            onTap: _isInitialized ? _listen : null,
+                            child: Image.asset('assets/mic.png', fit: BoxFit.contain),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 30),
+                GestureDetector(
+                  onTap: !_isListening
+                      ? () {
+                    setState(() {
+                      controllers[currentQuestion].clear();
+                    });
+                  }
+                      : null,
+                  child: SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: Image.asset('assets/reset_icon.png', fit: BoxFit.contain),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 버튼 (다음 또는 제출)
           Align(
             alignment: const Alignment(0, 0.9),
             child: FractionallySizedBox(
@@ -152,11 +326,35 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
                   ),
                 ),
                 child: Text(
-                  currentQuestion < questions.length - 1
-                      ? "다음으로 ➡️"
-                      : "제출하기 ✅",
+                  currentQuestion < questions.length - 1 ? "다음으로 ➔" : "제출하기 ✅",
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── 전체화면 이미지 뷰어 ─────────────────────────────────────────
+class ScreenshotViewerPage extends StatelessWidget {
+  final File imageFile;
+  const ScreenshotViewerPage({required this.imageFile, Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(child: Image.file(imageFile)),
+          Positioned(
+            top: 40,
+            left: 20,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
             ),
           ),
         ],

@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
-import '../drawing/Tree_drawing_page.dart';
+import '../drawing/tree_drawing_page.dart';
 
 class TreeIntroPage extends StatelessWidget {
-  const TreeIntroPage({Key? key}) : super(key: key);
+  final int testId;
+  final int childId;
+
+  const TreeIntroPage({
+    required this.testId,
+    required this.childId,
+    Key? key,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          // 배경 이미지
           Positioned.fill(
             child: Image.asset(
               'assets/tree_intro_background.png',
               fit: BoxFit.cover,
             ),
           ),
-
-          // 하단 버튼
           Positioned(
             bottom: 24,
             left: 24,
@@ -34,7 +38,12 @@ class TreeIntroPage extends StatelessWidget {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => TreeDrawingPage()),
+                    MaterialPageRoute(
+                      builder: (context) => TreeDrawingPage(
+                        testId: testId,
+                        childId: childId,
+                      ),
+                    ),
                   );
                 },
                 child: const Text(

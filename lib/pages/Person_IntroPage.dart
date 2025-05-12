@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
-import '../drawing/men_drawing_page.dart';
-import '../drawing/women_drawing_page.dart';
+import '../drawing/Men_drawing_page.dart';
+import '../drawing/Women_drawing_page.dart';
 import '../question/person_question_page.dart';
 import '../pages/finish_page.dart';
-import '../pages/men_intropage.dart';
-import '../pages/women_intropage.dart';
+import '../pages/Men_IntroPage.dart';
+import '../pages/Women_IntroPage.dart';
 
 class PersonIntroPage extends StatelessWidget {
-  const PersonIntroPage({Key? key}) : super(key: key);
+  final int testId;
+  final int childId;
+
+  const PersonIntroPage({
+    required this.testId,
+    required this.childId,
+    Key? key,
+  }) : super(key: key);
 
   void _showGenderChoiceDialog(BuildContext context) {
     showDialog(
@@ -40,35 +47,45 @@ class PersonIntroPage extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (_) => MenDrawingPage(
+          testId: testId,
+          childId: childId,
           isMan: true,
           onDrawingComplete: () {
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => PersonQuestionPage(
+                  testId: testId,
+                  childId: childId,
                   isMan: true,
                   onQuestionComplete: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => WomenIntroPage(
+                          testId: testId,
+                          childId: childId,
                           onStartDrawing: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => WomenDrawingPage(
+                                  testId: testId,
+                                  childId: childId,
                                   isMan: false,
                                   onDrawingComplete: () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                         builder: (_) => PersonQuestionPage(
+                                          testId: testId,
+                                          childId: childId,
                                           isMan: false,
                                           onQuestionComplete: () {
                                             Navigator.pushReplacement(
                                               context,
                                               MaterialPageRoute(
-                                                builder: (_) => const FinishPage(),
+                                                builder: (_) => FinishPage(testId: testId),
                                               ),
                                             );
                                           },
@@ -98,35 +115,45 @@ class PersonIntroPage extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (_) => WomenDrawingPage(
+          testId: testId,
+          childId: childId,
           isMan: false,
           onDrawingComplete: () {
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => PersonQuestionPage(
+                  testId: testId,
+                  childId: childId,
                   isMan: false,
                   onQuestionComplete: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => MenIntroPage(
+                          testId: testId,
+                          childId: childId,
                           onStartDrawing: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) => MenDrawingPage(
+                                  testId: testId,
+                                  childId: childId,
                                   isMan: true,
                                   onDrawingComplete: () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                         builder: (_) => PersonQuestionPage(
+                                          testId: testId,
+                                          childId: childId,
                                           isMan: true,
                                           onQuestionComplete: () {
                                             Navigator.pushReplacement(
                                               context,
                                               MaterialPageRoute(
-                                                builder: (_) => const FinishPage(),
+                                                builder: (_) => FinishPage(testId: testId),
                                               ),
                                             );
                                           },
