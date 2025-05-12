@@ -25,7 +25,8 @@ class PersonQuestionPage extends StatefulWidget {
 }
 
 class _PersonQuestionPageState extends State<PersonQuestionPage> {
-  final List<TextEditingController> controllers = List.generate(7, (_) => TextEditingController());
+  final List<TextEditingController> controllers = List.generate(
+      7, (_) => TextEditingController());
 
   late final List<String> questions;
   int currentQuestion = 0;
@@ -63,7 +64,7 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
     final drawingType = widget.isMan ? "man" : "woman";
 
     for (int i = 0; i < questions.length; i++) {
-      final uri = Uri.http('10.30.122.19:3000', '/test/addQnA');
+      final uri = Uri.http('192.168.0.23:3000', '/test/addQnA');
 
       try {
         final response = await http.post(
@@ -97,7 +98,7 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
       }
 
       await _submitAnswers();
-      widget.onQuestionComplete();  // 다음 단계로 넘어가기
+      widget.onQuestionComplete(); // 다음 단계로 넘어가기
     }
   }
 
@@ -106,7 +107,9 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
     final files = Directory(dir.path)
         .listSync()
         .whereType<File>()
-        .where((f) => f.path.contains('House_drawing_') && f.path.endsWith('.png'))
+        .where((f) =>
+    f.path.contains(widget.isMan ? 'men_drawing_' : 'men_drawing_') &&
+        f.path.endsWith('.png'))
         .toList();
 
     if (files.isEmpty) return null;
@@ -167,53 +170,8 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
           Positioned.fill(
             child: Image.asset('assets/Question_bg.png', fit: BoxFit.cover),
           ),
-          // 왼쪽 상단 - 이전 그림 다시보기
-          Align(
-            alignment: const Alignment(-0.95, -0.95),
-            child: FutureBuilder<File?>(
-              future: _getLatestScreenshot(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox();
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ScreenshotViewerPage(imageFile: snapshot.data!),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(230), // withOpacity → withAlpha
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset(
-                          'assets/photo.png',
-                          width: 24,
-                          height: 24,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          '이전 그림 다시보기',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
+
+          // 질문 텍스트
           Align(
             alignment: const Alignment(0, -0.75),
             child: FractionallySizedBox(
@@ -221,14 +179,14 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // 구름 이미지 크기 제한
                   Image.asset(
                     'assets/Cloud.png',
                     fit: BoxFit.contain,
                     width: double.infinity,
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24.0, vertical: 20),
                     child: Text(
                       questions[currentQuestion],
                       textAlign: TextAlign.center,
@@ -246,6 +204,8 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
               ),
             ),
           ),
+
+          // 답변 입력 필드
           Align(
             alignment: const Alignment(0, 0.3),
             child: FractionallySizedBox(
@@ -261,9 +221,11 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
                         maxLines: null,
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontSize: 30),
+                        enabled: !_isListening,
                         decoration: const InputDecoration(
                           hintText: "아이의 대답을 입력해주세요",
-                          hintStyle: TextStyle(fontSize: 30, color: Colors.grey),
+                          hintStyle: TextStyle(fontSize: 30,
+                              color: Colors.grey),
                           border: InputBorder.none,
                         ),
                       ),
@@ -273,57 +235,110 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
               ),
             ),
           ),
-          // 음성 인식 및 리셋 아이콘
+
+          // 마이크 + 초기화 + 이전 그림 다시보기
           Align(
             alignment: const Alignment(0, 0.65),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 80,
-                  height: 80,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Image.asset('assets/mic_bg.png', width: 80, height: 80),
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: _isListening ? Colors.green : Colors.transparent,
-                            width: 4,
+            child: FutureBuilder<File?>(
+              future: _getLatestScreenshot(),
+              builder: (context, snapshot) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // 🔁 이전 그림 다시보기
+                    if (snapshot.hasData)
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  ScreenshotViewerPage(
+                                      imageFile: snapshot.data!),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(230),
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black26, blurRadius: 4)
+                            ],
                           ),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(10.0),
-                          child: GestureDetector(
-                            onTap: _isInitialized ? _listen : null,
-                            child: Image.asset('assets/mic.png', fit: BoxFit.contain),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Image.asset(
+                                'assets/photo.png',
+                                width: 65,
+                                height: 65,
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 30),
-                GestureDetector(
-                  onTap: !_isListening
-                      ? () {
-                    setState(() {
-                      controllers[currentQuestion].clear();
-                    });
-                  }
-                      : null,
-                  child: SizedBox(
-                    width: 60,
-                    height: 60,
-                    child: Image.asset('assets/reset_icon.png', fit: BoxFit.contain),
-                  ),
-                ),
-              ],
+
+                    if (snapshot.hasData) const SizedBox(width: 30),
+
+                    // 🎤 마이크
+                    SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Image.asset(
+                              'assets/mic_bg.png', width: 80, height: 80),
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _isListening ? Colors.green : Colors
+                                    .transparent,
+                                width: 4,
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(10.0),
+                              child: GestureDetector(
+                                onTap: _isInitialized ? _listen : null,
+                                child: Image.asset(
+                                    'assets/mic.png', fit: BoxFit.contain),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 30),
+
+                    // 🔄 초기화
+                    GestureDetector(
+                      onTap: !_isListening
+                          ? () {
+                        setState(() {
+                          controllers[currentQuestion].clear();
+                        });
+                      }
+                          : null,
+                      child: SizedBox(
+                        width: 60,
+                        height: 60,
+                        child: Image.asset(
+                            'assets/reset_icon.png', fit: BoxFit.contain),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
-          // 버튼 (다음 또는 제출)
+
+          // 다음/제출 버튼
           Align(
             alignment: const Alignment(0, 0.9),
             child: FractionallySizedBox(
@@ -349,7 +364,6 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
     );
   }
 }
-
 // ─── 전체화면 이미지 뷰어 ─────────────────────────────────────────
 class ScreenshotViewerPage extends StatelessWidget {
   final File imageFile;

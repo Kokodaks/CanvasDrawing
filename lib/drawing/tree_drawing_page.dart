@@ -1,5 +1,7 @@
 import 'dart:async';
-import 'dart:ui' as ui;
+import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -43,23 +45,24 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   List<StrokeData> data = [];
   List<StrokeData> finalDrawingDataOnly = [];
 
-  int strokeStartTime = 0;
-  int strokeOrder = 0;
-  bool isErasing = false;
-  Color selectedColor = Colors.black;
+  int    strokeStartTime = 0;
+  int    strokeOrder     = 0;
+  double eraserSize = 10.0;
+  bool   isErasing       = false;
+  Color  selectedColor   = Colors.black;
 
-  final _canvasKey = GlobalKey();
+  final _canvasKey  = GlobalKey();
   final _repaintKey = GlobalKey();
 
-  Timer? _debounceTimer;
-  bool _modeJustChanged = false;
-  double _accumulatedLength = 0;
+  Timer?  _debounceTimer;
+  bool    _modeJustChanged   = false;
+  double  _accumulatedLength = 0;
 
   // ─── 녹화 상태 ─────────────────────────────────────────────
-  bool isRecording = false;
+  bool              isRecording = false;
   bool _onCompleteHandled = false;
-  bool _recordingInProgress = false;
-  bool _uploadInProgress = false;
+  bool              _recordingInProgress = false;
+  bool              _uploadInProgress    = false;
   late Completer<void> _videoDone;
 
   // ───────────────────────────────────────────────────────────
@@ -67,21 +70,17 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   void initState() {
     super.initState();
     _videoDone = Completer<void>();
+    _startRecording();
 
     const MethodChannel('native_recorder').setMethodCallHandler((call) async {
       if (call.method != 'onRecordingComplete') return;
-
-      // ◀️ 이 가드가 없으면 계속 반복 처리됩니다!
       if (_onCompleteHandled) return;
       _onCompleteHandled = true;
 
       final path = call.arguments as String;
       print('[REC] onRecordingComplete path=$path');
-
       await uploadVideo(path);
       if (!_videoDone.isCompleted) _videoDone.complete();
-
-      // 녹화 상태 해제 (UI 표시용)
       if (mounted) setState(() => isRecording = false);
       _recordingInProgress = false;
     });
@@ -89,8 +88,8 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
 
   Future<void> _startRecording() async {
     if (_recordingInProgress) return;
-    _recordingInProgress = true;
-    _onCompleteHandled = false; // ← 녹화 시작할 때마다 “한 번만” 리셋
+    _recordingInProgress     = true;
+    _onCompleteHandled       = false;  // ← 녹화 시작할 때마다 “한 번만” 리셋
 
     print('[REC] startRecording() 호출');
     _videoDone = Completer<void>();
@@ -103,7 +102,6 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
       _recordingInProgress = false;
     }
   }
-
   Future<void> _stopRecordingSafely() async {
     if (!_recordingInProgress) return;
     print('[REC] stopRecordingSafely() 호출');
@@ -116,9 +114,9 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
   }
 
   // ─── 드로잉 입력 ────────────────────────────────────────────
-  void startNewStroke(Offset globalPos, int time, double pressure) {
-    if (!_isInCanvas(globalPos)) return;
-    final position = _toLocal(globalPos);
+  void startNewStroke(Offset globalPosition, int time, double pressure) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);
     currentStroke = [
       StrokePoint(
         offset: position,
@@ -127,8 +125,6 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
         t: time,
       )
     ];
-    print(
-        '[PTR] newStroke (#${strokeOrder + 1}) at $position  erase=$isErasing');
     if (_modeJustChanged && !isErasing) {
       _takeScreenshotDirectly();
       _modeJustChanged = false;
@@ -136,9 +132,9 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
     _restartDebounceTimer();
   }
 
-  void addPointToStroke(Offset globalPos, int time, double pressure) {
-    if (!_isInCanvas(globalPos)) return;
-    final position = _toLocal(globalPos);
+  void addPointToStroke(Offset globalPosition, int time, double pressure) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);
     final width = _calculateStrokeWidthFromPressure(pressure);
 
     if (currentStroke.isNotEmpty) {
@@ -148,67 +144,110 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
 
     currentStroke.add(
       StrokePoint(
-          offset: position, color: selectedColor, strokeWidth: width, t: time),
+          offset: position,
+          color: selectedColor,
+          strokeWidth: width,
+          t: time
+      ),
     );
+
     _handleLengthBasedCapture();
     _restartDebounceTimer();
   }
 
-  void _endStroke() {
-    if (currentStroke.isEmpty) return;
-    strokeOrder++;
+  void endStroke() {
+    if (currentStroke.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
 
-    final sd = StrokeData(
-      isErasing: isErasing,
-      strokeOrder: strokeOrder,
-      strokeStartTime: strokeStartTime,
-      points: currentStroke,
-      color: selectedColor,
-    );
-
-    data.add(sd);
-    finalDrawingDataOnly.add(sd);
-    strokes.add(currentStroke);
-
-    print('[DRAW] endStroke #$strokeOrder  totalStrokes=${strokes.length}');
-    currentStroke = [];
+      strokes.add(currentStroke);
+      currentStroke = [];
+    }
   }
 
-  void eraseStrokeAt(Offset globalTapPos) {
-    if (!_isInCanvas(globalTapPos)) return;
-    final tap = _toLocal(globalTapPos);
+  Future<Uint8List?> _takeScreenshotDirectly() async {
+    try {
+      RenderRepaintBoundary boundary =
+      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      var image = await boundary.toImage(pixelRatio: 3.0);
+      ByteData? byteData = await image.toByteData(format: ImageByteFormat.png);
+      Uint8List pngBytes = byteData!.buffer.asUint8List();
 
-    final target = strokes.firstWhereOrNull(
-          (stroke) =>
-          stroke.any(
-                (p) => p.offset != null && (p.offset! - tap).distance <= 20,
-          ),
-    );
+      final dir = Platform.isIOS
+          ? await getApplicationDocumentsDirectory()
+          : Directory('/storage/emulated/0/Download');
+      final path = '${dir.path}/tree_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File(path);
+      await file.writeAsBytes(pngBytes);
 
-    if (target != null) {
-      data.add(
-        StrokeData(
-          isErasing: true,
-          strokeOrder: ++strokeOrder,
-          strokeStartTime: DateTime
-              .now()
-              .millisecondsSinceEpoch,
-          points: target,
-          color: selectedColor,
-        ),
-      );
-      strokes.remove(target);
-      finalDrawingDataOnly.removeWhere((sd) => identical(sd.points, target));
-      print(
-          '[DRAW] eraseStroke len=${target.length}  remain=${strokes.length}');
+      print('🖼️ 스크린샷 저장 완료: $path');
+      return pngBytes;
+    } catch (e) {
+      print('스크린샷 실패: $e');
+      return null;
+    }
+  }
+
+  void eraseStrokeAt(Offset globalTapPosition) {
+    if (!_isInCanvas(globalTapPosition)) return;
+    final tapPosition = _toLocal(globalTapPosition);
+
+    int beforeCount = strokes.length;
+    final toBeErased = strokes.firstWhereOrNull((stroke) {
+      return stroke.any((point) =>
+      point.offset != null &&
+          (point.offset! - tapPosition).distance <= eraserSize);
+    });
+
+    if(toBeErased != null){
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
     }
 
-    // 상태 변경 후 바로 화면 갱신
     setState(() {
-      // UI 갱신을 강제로 호출하여 바로 지운 내용이 반영되도록 함
+      strokes.removeWhere((stroke) {
+        return stroke.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+    });
+
+    int afterCount = strokes.length;
+
+    _takeScreenshotDirectly().then((pngBefore) {
+      if(isErasing && beforeCount > afterCount){
+        _takeScreenshotDirectly().then((pngAfter) {
+          if (pngBefore != null && pngAfter != null) {
+            final allJsonData = data.map((stroke) => stroke.toJsonOpenAi()).toList();
+            ApiService.sendToOpenAi(pngBefore, pngAfter, allJsonData);
+          }
+        });
+      }
     });
 
     _restartDebounceTimer();
+  }
+
+  Offset _toLocal(Offset globalPosition) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return Offset.zero;
+    return renderBox.globalToLocal(globalPosition);
+  }
+
+  bool _isInCanvas(Offset globalPosition) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return false;
+    final localPosition = renderBox.globalToLocal(globalPosition);
+    return localPosition.dx >= 0 &&
+        localPosition.dy >= 0 &&
+        localPosition.dx <= renderBox.size.width &&
+        localPosition.dy <= renderBox.size.height;
   }
 
   // ─── 캡처 타이머 & 길이 기반 캡처 ───────────────────────────
@@ -238,57 +277,26 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
     return minWidth + (maxWidth - minWidth) * p;
   }
 
-  Offset _toLocal(Offset globalPosition) {
-    final renderBox =
-    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return Offset.zero;
-    return renderBox.globalToLocal(globalPosition);
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 
-  bool _isInCanvas(Offset globalPosition) {
-    final renderBox =
-    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return false;
-    final localPosition = renderBox.globalToLocal(globalPosition);
-    return localPosition.dx >= 0 &&
-        localPosition.dy >= 0 &&
-        localPosition.dx <= renderBox.size.width &&
-        localPosition.dy <= renderBox.size.height;
-  }
-
-  // ─── 스크린샷 저장 ─────────────────────────────────────────
-  Future<void> _takeScreenshotDirectly() async {
-    try {
-      final boundary =
-      _repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3);
-      final png   = (await image.toByteData(format: ui.ImageByteFormat.png))!
-          .buffer.asUint8List();
-
-      final dir = Platform.isIOS
-          ? await getApplicationDocumentsDirectory()
-          : Directory('/storage/emulated/0/Download');
-      final path = '${dir.path}/House_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
-      await File(path).writeAsBytes(png);
-      print('🖼️ 스크린샷 저장 완료: $path');
-    } catch (e) {
-      print('스크린샷 실패: $e');
-    }
-  }
 
   // ─── 영상 업로드 ───────────────────────────────────────────
   Future<void> uploadVideo(String path) async {
     if (_uploadInProgress) return;
     _uploadInProgress = true;
 
-    final uri = Uri.parse('http://10.30.122.19:3000/video/upload');
+    final uri = Uri.parse('http://192.168.0.23:3000/video/upload');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
-      ..fields['name'] = 'tree_drawing_recording';
+      ..fields['name']   = 'tree_drawing_recording';
 
     try {
       req.files.add(await http.MultipartFile.fromPath('video', path));
-      final res = await req.send();
+      final res  = await req.send();
       final body = await res.stream.bytesToString();
       print('[API] 상태코드=${res.statusCode} body=$body');
     } catch (e) {
@@ -351,16 +359,19 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
                       : setState(() =>
                       startNewStroke(e.position, 0, e.pressure));
                 },
-                onPointerMove: (e) {
+                onPointerMove: (PointerMoveEvent event) {
+                  final position = event.position;
+                  final currentTime = DateTime.now().millisecondsSinceEpoch;
+                  final t = currentTime - strokeStartTime;
+
                   if (!isErasing) {
-                    final t = DateTime
-                        .now()
-                        .millisecondsSinceEpoch - strokeStartTime;
-                    setState(() => addPointToStroke(e.position, t, e.pressure));
+                    setState(() => addPointToStroke(position, t, event.pressure));
                   }
                 },
                 onPointerUp: (_) {
-                  if (!isErasing) setState(_endStroke);
+                  if (!isErasing) {
+                    setState(() => endStroke());
+                  }
                 },
                 child: Container(
                   key: _canvasKey,
@@ -408,35 +419,6 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
               ],
             ),
           ),
-
-          // ─── 녹화 버튼 ───
-          Positioned(
-            top: 40,
-            right: 20,
-            child: GestureDetector(
-              onTap: isRecording ? null : _startRecording,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isRecording ? Colors.red : Colors.green,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 6,
-                      offset: Offset(2, 4),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  isRecording ? Icons.videocam : Icons.fiber_manual_record,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-            ),
-          ),
-
           // ─── 완료 버튼 ───
           Positioned(
             bottom: 40,
@@ -456,7 +438,6 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
                   testId: widget.testId,
                   childId: widget.childId,
                 );
-
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -485,54 +466,50 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
 
 
   // ─── 툴 버튼 헬퍼 ───────────────────────────────────────────
-  Widget _toolButton(String assetPath, VoidCallback onTap,
-      bool isSelected) {
+  Widget _toolButton(String asset, VoidCallback onTap, bool selected) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: isSelected
-              ? Border.all(color: Colors.orangeAccent, width: 3)
-              : null,
+          border: selected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
           boxShadow: [
             BoxShadow(
-              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors
-                  .black26,
+              color: (selected ? Colors.orangeAccent : Colors.black26).withOpacity(0.6),
               blurRadius: 10,
               offset: const Offset(2, 4),
             ),
           ],
         ),
-        child: Image.asset(
-          assetPath,
-          width: 60,
-          height: 60,
-        ),
+        child: Image.asset(asset, width: 60, height: 60),
       ),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;
+
   StrokePainter(this.strokes, this.currentStroke);
 
   @override
   void paint(Canvas canvas, Size size) {
+    final backgroundPaint = Paint()..color = Colors.white;
+    canvas.drawRect(Offset.zero & size, backgroundPaint);
+
     for (final stroke in [...strokes, currentStroke]) {
       for (int i = 0; i < stroke.length - 1; i++) {
-        final p1 = stroke[i];
-        final p2 = stroke[i + 1];
-        canvas.drawLine(
-          p1.offset!,
-          p2.offset!,
-          Paint()
-            ..color = p1.color
-            ..strokeWidth = p1.strokeWidth
-            ..strokeCap = StrokeCap.round,
-        );
+        if (stroke[i].offset != null && stroke[i + 1].offset != null) {
+          final paint = Paint()
+            ..color = stroke[i].color
+            ..strokeWidth = stroke[i].strokeWidth
+            ..strokeCap = StrokeCap.round
+            ..blendMode = BlendMode.srcOver;
+          canvas.drawLine(stroke[i].offset!, stroke[i + 1].offset!, paint);
+        }
       }
     }
   }

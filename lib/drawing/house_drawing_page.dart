@@ -70,21 +70,17 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   void initState() {
     super.initState();
     _videoDone = Completer<void>();
+    _startRecording();
 
     const MethodChannel('native_recorder').setMethodCallHandler((call) async {
       if (call.method != 'onRecordingComplete') return;
-
-      // ◀️ 이 가드가 없으면 계속 반복 처리됩니다!
       if (_onCompleteHandled) return;
       _onCompleteHandled = true;
 
       final path = call.arguments as String;
       print('[REC] onRecordingComplete path=$path');
-
       await uploadVideo(path);
       if (!_videoDone.isCompleted) _videoDone.complete();
-
-      // 녹화 상태 해제 (UI 표시용)
       if (mounted) setState(() => isRecording = false);
       _recordingInProgress = false;
     });
@@ -136,10 +132,10 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     _restartDebounceTimer();
   }
 
-  void addPointToStroke(Offset globalPos, int time, double pressure) {
-    if (!_isInCanvas(globalPos)) return;
-    final position = _toLocal(globalPos);
-    final width    = _calculateStrokeWidthFromPressure(pressure);
+  void addPointToStroke(Offset globalPosition, int time, double pressure) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);
+    final width = _calculateStrokeWidthFromPressure(pressure);
 
     if (currentStroke.isNotEmpty) {
       final prev = currentStroke.last.offset!;
@@ -147,33 +143,28 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     }
 
     currentStroke.add(
-      StrokePoint(offset: position, color: selectedColor, strokeWidth: width, t: time),
+      StrokePoint(
+          offset: position,
+          color: selectedColor,
+          strokeWidth: width,
+          t: time
+      ),
     );
+
     _handleLengthBasedCapture();
     _restartDebounceTimer();
   }
 
   void endStroke() {
     if (currentStroke.isNotEmpty) {
-      // strokeOrder는 외부에서 이미 증가되었다고 가정
-      data.add(StrokeData(
-        isErasing: isErasing,
-        strokeOrder: strokeOrder,
-        strokeStartTime: strokeStartTime,
-        points: currentStroke,
-        color: selectedColor,
-      ));
-      finalDrawingDataOnly.add(StrokeData(
-        isErasing: isErasing,
-        strokeOrder: strokeOrder,
-        strokeStartTime: strokeStartTime,
-        points: currentStroke,
-        color: selectedColor,
-      ));
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+
       strokes.add(currentStroke);
       currentStroke = [];
     }
   }
+
   Future<Uint8List?> _takeScreenshotDirectly() async {
     try {
       RenderRepaintBoundary boundary =
@@ -185,7 +176,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       final dir = Platform.isIOS
           ? await getApplicationDocumentsDirectory()
           : Directory('/storage/emulated/0/Download');
-      final path = '${dir.path}/Men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final path = '${dir.path}/house_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File(path);
       await file.writeAsBytes(pngBytes);
 
@@ -241,6 +232,24 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     _restartDebounceTimer();
   }
 
+  Offset _toLocal(Offset globalPosition) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return Offset.zero;
+    return renderBox.globalToLocal(globalPosition);
+  }
+
+  bool _isInCanvas(Offset globalPosition) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return false;
+    final localPosition = renderBox.globalToLocal(globalPosition);
+    return localPosition.dx >= 0 &&
+        localPosition.dy >= 0 &&
+        localPosition.dx <= renderBox.size.width &&
+        localPosition.dy <= renderBox.size.height;
+  }
+
   // ─── 캡처 타이머 & 길이 기반 캡처 ───────────────────────────
   void _restartDebounceTimer() {
     _debounceTimer?.cancel();
@@ -274,30 +283,13 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     super.dispose();
   }
 
-  Offset _toLocal(Offset globalPosition) {
-    final renderBox =
-    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return Offset.zero;
-    return renderBox.globalToLocal(globalPosition);
-  }
-
-  bool _isInCanvas(Offset globalPosition) {
-    final renderBox =
-    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return false;
-    final localPosition = renderBox.globalToLocal(globalPosition);
-    return localPosition.dx >= 0 &&
-        localPosition.dy >= 0 &&
-        localPosition.dx <= renderBox.size.width &&
-        localPosition.dy <= renderBox.size.height;
-  }
 
   // ─── 영상 업로드 ───────────────────────────────────────────
   Future<void> uploadVideo(String path) async {
     if (_uploadInProgress) return;
     _uploadInProgress = true;
 
-    final uri = Uri.parse('http://10.30.122.19:3000/video/upload');
+    final uri = Uri.parse('http://192.168.0.23:3000/video/upload');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
       ..fields['name']   = 'house_drawing_recording';
@@ -367,16 +359,19 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                       : setState(() =>
                       startNewStroke(e.position, 0, e.pressure));
                 },
-                onPointerMove: (e) {
+                onPointerMove: (PointerMoveEvent event) {
+                  final position = event.position;
+                  final currentTime = DateTime.now().millisecondsSinceEpoch;
+                  final t = currentTime - strokeStartTime;
+
                   if (!isErasing) {
-                    final t = DateTime
-                        .now()
-                        .millisecondsSinceEpoch - strokeStartTime;
-                    setState(() => addPointToStroke(e.position, t, e.pressure));
+                    setState(() => addPointToStroke(position, t, event.pressure));
                   }
                 },
                 onPointerUp: (_) {
-                  if (!isErasing) setState(endStroke);
+                  if (!isErasing) {
+                    setState(() => endStroke());
+                  }
                 },
                 child: Container(
                   key: _canvasKey,
@@ -424,35 +419,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
               ],
             ),
           ),
-
-          // ─── 녹화 버튼 ───
-          Positioned(
-            top: 40,
-            right: 20,
-            child: GestureDetector(
-              onTap: isRecording ? null : _startRecording,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: isRecording ? Colors.red : Colors.green,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 6,
-                      offset: Offset(2, 4),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  isRecording ? Icons.videocam : Icons.fiber_manual_record,
-                  color: Colors.white,
-                  size: 30,
-                ),
-              ),
-            ),
-          ),
-
           // ─── 완료 버튼 ───
           Positioned(
             bottom: 40,
@@ -499,7 +465,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   }
 
 
-    // ─── 툴 버튼 헬퍼 ───────────────────────────────────────────
+  // ─── 툴 버튼 헬퍼 ───────────────────────────────────────────
   Widget _toolButton(String asset, VoidCallback onTap, bool selected) {
     return GestureDetector(
       onTap: onTap,

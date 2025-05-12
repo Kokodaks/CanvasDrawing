@@ -10,7 +10,7 @@ class FinishPage extends StatelessWidget {
 
   Future<void> _markAsCompletedAndExit(BuildContext context) async {
     try {
-      final uri = Uri.http('192.168.200.103:3000', '/test/markTestAsCompleted');
+      final uri = Uri.http('192.168.0.23:3000', '/test/markTestAsCompleted');
 
       final response = await http.post(
         uri,

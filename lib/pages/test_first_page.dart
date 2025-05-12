@@ -31,7 +31,7 @@ class _TestFirstPageState extends State<TestFirstPage> {
 
     try {
       final uri = Uri.http(
-        '10.30.122.19:3000',
+        '192.168.0.23:3000',
         '/test/getTestBySsn',
         {'name': name, 'ssn': rrn},
       );

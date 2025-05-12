@@ -42,7 +42,7 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
   }
 
   Future<void> _checkQnADocumentExists() async {
-    final uri = Uri.http('10.30.122.19:3000', '/test/getQnAByTestId', {
+    final uri = Uri.http('192.168.0.23:3000', '/test/getQnAByTestId', {
       'testId': widget.testId.toString(),
       'drawingType': 'tree',
     });
@@ -127,7 +127,7 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
         break;
       }
 
-      final uri = Uri.http('10.30.122.19:3000', '/test/addQnA');
+      final uri = Uri.http('192.168.0.23:3000', '/test/addQnA');
 
       try {
         final response = await http.post(
@@ -195,7 +195,7 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
         .listSync()
         .whereType<File>()
         .where((f) =>
-    f.path.contains('House_drawing_') && f.path.endsWith('.png'))
+    f.path.contains('house_drawing_') && f.path.endsWith('.png'))
         .toList();
 
     if (files.isEmpty) return null;
