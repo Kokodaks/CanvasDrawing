@@ -2,7 +2,14 @@ import 'package:flutter/material.dart';
 import '../drawing/house_drawing_page.dart';
 
 class HouseIntroPage extends StatelessWidget {
-  const HouseIntroPage({Key? key}) : super(key: key);
+  final int testId;
+  final int childId;
+
+  const HouseIntroPage({
+    required this.testId,
+    required this.childId,
+    Key? key,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +33,7 @@ class HouseIntroPage extends StatelessWidget {
               height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFA726),
+                  backgroundColor: Colors.orange,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
                   ),
@@ -34,7 +41,12 @@ class HouseIntroPage extends StatelessWidget {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => HouseDrawingPage()),
+                    MaterialPageRoute(
+                      builder: (context) => HouseDrawingPage(
+                        testId: testId,
+                        childId: childId,
+                      ),
+                    ),
                   );
                 },
                 child: const Text(

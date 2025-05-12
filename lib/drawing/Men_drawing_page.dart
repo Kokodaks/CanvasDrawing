@@ -1,39 +1,283 @@
-// ... 기존 import 유지 ...
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import '../question/tree_question_page.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:collection/collection.dart';
 import '../drawing/stroke_point.dart';
+import '../drawing/stroke_data.dart';
+import '../services/api_service.dart';
 
-class MenDrawingPage extends StatefulWidget {
-  final VoidCallback onDrawingComplete;
-  final bool isMan;
-
-  const MenDrawingPage({Key? key, required this.onDrawingComplete, required this.isMan}) : super(key: key);
-
-  @override
-  _MenDrawingPageState createState() => _MenDrawingPageState();
+// ─── Recorder Bridge ─────────────────────────────────────────
+class RecorderBridge {
+  static const MethodChannel _channel = MethodChannel('native_recorder');
+  static Future<void> startRecording() =>
+      _channel.invokeMethod('startRecording');
+  static Future<void> stopRecording() =>
+      _channel.invokeMethod('stopRecording');
 }
 
+// ─────────────────────────────────────────────────────────────
+class MenDrawingPage extends StatefulWidget {
+  final int testId;
+  final int childId;
+  final bool isMan;
+  final VoidCallback onDrawingComplete;
+
+  const MenDrawingPage({
+    required this.testId,
+    required this.childId,
+    required this.isMan,
+    required this.onDrawingComplete,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  State<MenDrawingPage> createState() => _MenDrawingPageState();
+}
+
+// ─────────────────────────────────────────────────────────────
 class _MenDrawingPageState extends State<MenDrawingPage> {
+  // ─── 드로잉 상태 ────────────────────────────────────────────
   List<List<StrokePoint>> strokes = [];
   List<StrokePoint> currentStroke = [];
+  List<StrokeData> data = [];
+  List<StrokeData> finalDrawingDataOnly = [];
 
-  bool isErasing = false;
-  Color selectedColor = Colors.black;
+  int    strokeStartTime = 0;
+  int    strokeOrder     = 0;
+  double eraserSize = 10.0;
+  bool   isErasing       = false;
+  Color  selectedColor   = Colors.black;
 
-  final GlobalKey _canvasKey = GlobalKey();
-  final GlobalKey _repaintKey = GlobalKey();
+  final _canvasKey  = GlobalKey();
+  final _repaintKey = GlobalKey();
 
-  Timer? _debounceTimer;
-  bool _modeJustChanged = false;
-  bool _buttonFlash = false;
+  Timer?  _debounceTimer;
+  bool    _modeJustChanged   = false;
+  double  _accumulatedLength = 0;
 
-  double _accumulatedLength = 0.0;
+  // ─── 녹화 상태 ─────────────────────────────────────────────
+  bool              isRecording = false;
+  bool _onCompleteHandled = false;
+  bool              _recordingInProgress = false;
+  bool              _uploadInProgress    = false;
+  late Completer<void> _videoDone;
+
+  // ───────────────────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    _videoDone = Completer<void>();
+    _startRecording(); // ✅ 자동 녹화 시작
+
+    const MethodChannel('native_recorder').setMethodCallHandler((call) async {
+      if (call.method != 'onRecordingComplete') return;
+      if (_onCompleteHandled) return;
+      _onCompleteHandled = true;
+
+      final path = call.arguments as String;
+      print('[REC] onRecordingComplete path=$path');
+      await uploadVideo(path);
+      if (!_videoDone.isCompleted) _videoDone.complete();
+      if (mounted) setState(() => isRecording = false);
+      _recordingInProgress = false;
+    });
+  }
+
+  Future<void> _startRecording() async {
+    if (_recordingInProgress) return;
+    _recordingInProgress     = true;
+    _onCompleteHandled       = false;  // ← 녹화 시작할 때마다 “한 번만” 리셋
+
+    print('[REC] startRecording() 호출');
+    _videoDone = Completer<void>();
+    try {
+      await RecorderBridge.startRecording();
+      if (mounted) setState(() => isRecording = true);
+      print('[REC] startRecording() 성공');
+    } catch (e) {
+      print('[REC] startRecording() 예외: $e');
+      _recordingInProgress = false;
+    }
+  }
+  Future<void> _stopRecordingSafely() async {
+    if (!_recordingInProgress) return;
+    print('[REC] stopRecordingSafely() 호출');
+    try {
+      await RecorderBridge.stopRecording();
+      print('[REC] stopRecording OK');
+    } catch (e) {
+      print('[REC] stopRecording 예외: $e');
+    }
+  }
+
+  // ─── 드로잉 입력 ────────────────────────────────────────────
+  void startNewStroke(Offset globalPosition, int time, double pressure) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);
+    currentStroke = [
+      StrokePoint(
+        offset: position,
+        color: selectedColor,
+        strokeWidth: _calculateStrokeWidthFromPressure(pressure),
+        t: time,
+      )
+    ];
+    if (_modeJustChanged && !isErasing) {
+      _takeScreenshotDirectly();
+      _modeJustChanged = false;
+    }
+    _restartDebounceTimer();
+  }
+
+  void addPointToStroke(Offset globalPosition, int time, double pressure) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);
+    final width = _calculateStrokeWidthFromPressure(pressure);
+
+    if (currentStroke.isNotEmpty) {
+      final prev = currentStroke.last.offset!;
+      _accumulatedLength += (position - prev).distance;
+    }
+
+    currentStroke.add(
+      StrokePoint(
+          offset: position,
+          color: selectedColor,
+          strokeWidth: width,
+          t: time
+      ),
+    );
+
+    _handleLengthBasedCapture();
+    _restartDebounceTimer();
+  }
+
+  void endStroke() {
+    if (currentStroke.isNotEmpty) {
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+      finalDrawingDataOnly.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: currentStroke, color: selectedColor));
+
+      strokes.add(currentStroke);
+      currentStroke = [];
+    }
+  }
+
+  Future<Uint8List?> _takeScreenshotDirectly() async {
+    try {
+      RenderRepaintBoundary boundary =
+      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      var image = await boundary.toImage(pixelRatio: 3.0);
+      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      Uint8List pngBytes = byteData!.buffer.asUint8List();
+
+      final dir = Platform.isIOS
+          ? await getApplicationDocumentsDirectory()
+          : Directory('/storage/emulated/0/Download');
+      final path = '${dir.path}/men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File(path);
+      await file.writeAsBytes(pngBytes);
+
+      print('🖼️ 스크린샷 저장 완료: $path');
+      return pngBytes;
+    } catch (e) {
+      print('스크린샷 실패: $e');
+      return null;
+    }
+  }
+
+  void eraseStrokeAt(Offset globalTapPosition) {
+    if (!_isInCanvas(globalTapPosition)) return;
+    final tapPosition = _toLocal(globalTapPosition);
+
+    int beforeCount = strokes.length;
+    final toBeErased = strokes.firstWhereOrNull((stroke) {
+      return stroke.any((point) =>
+      point.offset != null &&
+          (point.offset! - tapPosition).distance <= eraserSize);
+    });
+
+    if(toBeErased != null){
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
+    }
+
+    setState(() {
+      strokes.removeWhere((stroke) {
+        return stroke.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+    });
+
+    int afterCount = strokes.length;
+
+    _takeScreenshotDirectly().then((pngBefore) {
+      if(isErasing && beforeCount > afterCount){
+        _takeScreenshotDirectly().then((pngAfter) {
+          if (pngBefore != null && pngAfter != null) {
+            final allJsonData = data.map((stroke) => stroke.toJsonOpenAi()).toList();
+            ApiService.sendToOpenAi(pngBefore, pngAfter, allJsonData);
+          }
+        });
+      }
+    });
+
+    _restartDebounceTimer();
+  }
+
+  Offset _toLocal(Offset globalPosition) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return Offset.zero;
+    return renderBox.globalToLocal(globalPosition);
+  }
+
+  bool _isInCanvas(Offset globalPosition) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return false;
+    final localPosition = renderBox.globalToLocal(globalPosition);
+    return localPosition.dx >= 0 &&
+        localPosition.dy >= 0 &&
+        localPosition.dx <= renderBox.size.width &&
+        localPosition.dy <= renderBox.size.height;
+  }
+
+  // ─── 캡처 타이머 & 길이 기반 캡처 ───────────────────────────
+  void _restartDebounceTimer() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(seconds: 5), () async {
+      if (mounted) {
+        if (strokes.isNotEmpty || currentStroke.isNotEmpty) {
+          await _takeScreenshotDirectly();
+        }
+      }
+    });
+  }
+
+  void _handleLengthBasedCapture() {
+    if (_accumulatedLength > 1000) {
+      _takeScreenshotDirectly();
+      _accumulatedLength = 0;
+    }
+  }
+
+  // ─── 유틸 ───────────────────────────────────────────────────
+  double _calculateStrokeWidthFromPressure(double pressure) {
+    const double minWidth = 2.0;
+    const double maxWidth = 10.0;
+    final p = pressure.clamp(0.0, 1.0);
+    return minWidth + (maxWidth - minWidth) * p;
+  }
 
   @override
   void dispose() {
@@ -41,165 +285,100 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     super.dispose();
   }
 
-  void _restartDebounceTimer() {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 5), () async {
-      if (mounted) await _takeScreenshot();
-    });
-  }
 
-  Future<void> _takeScreenshot() async {
+  // ─── 영상 업로드 ───────────────────────────────────────────
+  Future<void> uploadVideo(String path) async {
+    if (_uploadInProgress) return;
+    _uploadInProgress = true;
+
+    final uri = Uri.parse('http://192.168.0.23:3000/video/upload');
+    final req = http.MultipartRequest('POST', uri)
+      ..fields['testId'] = widget.testId.toString()
+      ..fields['name']   = 'house_drawing_recording';
+
     try {
-      RenderRepaintBoundary boundary = _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      Uint8List pngBytes = byteData!.buffer.asUint8List();
-
-      final directory = Directory.systemTemp;
-      final path = '${directory.path}/Men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
-      await File(path).writeAsBytes(pngBytes);
-      print("✅ 저장 완료: $path");
+      req.files.add(await http.MultipartFile.fromPath('video', path));
+      final res  = await req.send();
+      final body = await res.stream.bytesToString();
+      print('[API] 상태코드=${res.statusCode} body=$body');
     } catch (e) {
-      print("❌ 스크린샷 실패: $e");
+      print('[API] 업로드 예외: $e');
+    } finally {
+      _uploadInProgress = false;
     }
   }
 
-  void _startStroke(Offset position, double pressure) {
-    if (!_isInDrawingArea(position)) return;
-    Offset local = _toLocal(position);
-    currentStroke = [
-      StrokePoint(
-        offset: local,
-        color: selectedColor,
-        strokeWidth: _calculateStrokeWidthFromPressure(pressure),
-      )
-    ];
-    if (_modeJustChanged) {
-      _takeScreenshot();
-      _modeJustChanged = false;
-    }
-    _restartDebounceTimer();
-  }
-
-  void _addPoint(Offset position, double pressure) {
-    if (!_isInDrawingArea(position)) return;
-    Offset local = _toLocal(position);
-
-    if (currentStroke.isNotEmpty) {
-      final Offset last = currentStroke.last.offset;
-      _accumulatedLength += (local - last).distance;
-    }
-
-    currentStroke.add(
-      StrokePoint(
-        offset: local,
-        color: selectedColor,
-        strokeWidth: _calculateStrokeWidthFromPressure(pressure),
-      ),
-    );
-
-    if (_accumulatedLength > 500) {
-      _takeScreenshot();
-      _accumulatedLength = 0;
-    }
-
-    _restartDebounceTimer();
-  }
-
-  void _endStroke() {
-    if (currentStroke.isNotEmpty) {
-      strokes.add(currentStroke);
-
-      // 좌표 콘솔 출력 추가
-      print("🖊️ Stroke ${strokes.length} 좌표:");
-      for (final pt in currentStroke) {
-        final json = pt.toJson();
-        print("x: ${json['x']}, y: ${json['y']}, width: ${json['strokeWidth']}");
-      }
-
-      currentStroke = [];
-    }
-  }
-
-  double _calculateStrokeWidthFromPressure(double pressure) {
-    const double minWidth = 2.0;
-    const double maxWidth = 20.0;
-    return minWidth + (maxWidth - minWidth) * pressure.clamp(0.0, 1.0);
-  }
-
-  Offset _toLocal(Offset globalPosition) {
-    final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    return box?.globalToLocal(globalPosition) ?? Offset.zero;
-  }
-
-  bool _isInDrawingArea(Offset globalPosition) {
-    final box = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return false;
-    final local = box.globalToLocal(globalPosition);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= box.size.width &&
-        local.dy <= box.size.height;
-  }
-
-  void _eraseStrokeAtPosition(Offset position) {
-    final local = _toLocal(position);
-    const double eraseRadius = 20.0;
-
-    setState(() {
-      strokes.removeWhere((stroke) {
-        return stroke.any((point) => (point.offset - local).distance <= eraseRadius);
-      });
-    });
-
-    if (_modeJustChanged) {
-      _takeScreenshot();
-      _modeJustChanged = false;
-    }
-
-    _restartDebounceTimer();
-  }
-
+  // ─── UI(Build) ────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-
-    final canvasWidth = screenWidth * 0.65;
-    final canvasHeight = canvasWidth * (297 / 210); // A4 비율
+    final sw = MediaQuery
+        .of(context)
+        .size
+        .width;
+    final canvasW = sw * 0.8; // 기존 0.65보다 더 크게 확장
+    final canvasH = canvasW * (297 / 210); // 비율은 유지 (A4 비율)
 
     return Scaffold(
       body: Stack(
         children: [
+          // ─── 배경 이미지 ───
           Positioned.fill(
-            child: Image.asset('assets/Men_drawing_bg.png', fit: BoxFit.cover),
+            child: Image.asset('assets/exercise.png', fit: BoxFit.cover),
           ),
 
+          // ✅ 그림판 위쪽에 이미지 배치
+          Positioned(
+            top: 70,
+            left: 45,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Image.asset('assets/house_tree.png', width: 80, height: 80),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Image.asset('assets/남자를.png', width: 60),
+                    const SizedBox(height: 4),
+                    Image.asset('assets/그려봐!.png', width: 80),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // ─── 그림판 (RepaintBoundary) ───
           Center(
             child: RepaintBoundary(
               key: _repaintKey,
               child: Listener(
-                onPointerDown: (event) {
-                  if (isErasing) {
-                    _eraseStrokeAtPosition(event.position);
-                  } else {
-                    setState(() => _startStroke(event.position, event.pressure));
-                  }
+                onPointerDown: (e) {
+                  strokeStartTime = DateTime
+                      .now()
+                      .millisecondsSinceEpoch;
+                  isErasing
+                      ? eraseStrokeAt(e.position)
+                      : setState(() =>
+                      startNewStroke(e.position, 0, e.pressure));
                 },
-                onPointerMove: (event) {
+                onPointerMove: (PointerMoveEvent event) {
+                  final position = event.position;
+                  final currentTime = DateTime.now().millisecondsSinceEpoch;
+                  final t = currentTime - strokeStartTime;
+
                   if (!isErasing) {
-                    setState(() => _addPoint(event.position, event.pressure));
+                    setState(() => addPointToStroke(position, t, event.pressure));
                   }
                 },
                 onPointerUp: (_) {
                   if (!isErasing) {
-                    setState(() => _endStroke());
+                    setState(() => endStroke());
                   }
                 },
                 child: Container(
                   key: _canvasKey,
-                  width: canvasWidth,
-                  height: canvasHeight,
+                  width: canvasW,
+                  height: canvasH,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
@@ -216,45 +395,63 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
             ),
           ),
 
+          // ─── 도구 버튼 ───
           Positioned(
             right: 32,
-            top: screenHeight / 2 - 80,
+            top: MediaQuery
+                .of(context)
+                .size
+                .height / 2 - 80,
             child: Column(
               children: [
-                _buildToolButton('assets/pencil.png', () {
+                _toolButton('assets/pencil.png', () {
                   setState(() {
                     isErasing = false;
                     selectedColor = Colors.black;
                     _modeJustChanged = true;
-                    _triggerFlash();
                   });
                 }, !isErasing),
                 const SizedBox(height: 24),
-                _buildToolButton('assets/eraser.png', () {
+                _toolButton('assets/eraser.png', () {
                   setState(() {
                     isErasing = true;
                     _modeJustChanged = true;
-                    _triggerFlash();
                   });
                 }, isErasing),
               ],
             ),
           ),
 
+          // ─── 완료 버튼 ───
           Positioned(
             bottom: 40,
             left: 60,
             right: 60,
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                await _stopRecordingSafely();
+                await _takeScreenshotDirectly();
+
+                final allJson = data.map((e) => e.toJson()).toList();
+                final finalJson = finalDrawingDataOnly.map((e) => e.toJson())
+                    .toList();
+                ApiService.sendStrokesWithMulter(
+                  allJson,
+                  finalJson,
+                  testId: widget.testId,
+                  childId: widget.childId,
+                );
                 widget.onDrawingComplete();
+
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: const Text('다 그렸어!', style: TextStyle(fontSize: 18, color: Colors.white)),
+              child: const Text('다 그렸어!', style: TextStyle(fontSize: 18)),
             ),
           ),
         ],
@@ -262,61 +459,31 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     );
   }
 
-  void _triggerFlash() {
-    _buttonFlash = true;
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
-        setState(() {
-          _buttonFlash = false;
-        });
-      }
-    });
-  }
 
-  Widget _buildToolButton(String assetPath, VoidCallback onTap, bool isSelected) {
+  // ─── 툴 버튼 헬퍼 ───────────────────────────────────────────
+  Widget _toolButton(String asset, VoidCallback onTap, bool selected) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: isSelected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
+          border: selected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
           boxShadow: [
             BoxShadow(
-              color: isSelected ? Colors.orangeAccent.withOpacity(0.6) : Colors.black26,
+              color: (selected ? Colors.orangeAccent : Colors.black26).withOpacity(0.6),
               blurRadius: 10,
               offset: const Offset(2, 4),
             ),
           ],
         ),
-        child: Opacity(
-          opacity: _buttonFlash && isSelected ? 0.6 : 1.0,
-          child: Image.asset(
-            assetPath,
-            width: 60,
-            height: 60,
-          ),
-        ),
+        child: Image.asset(asset, width: 60, height: 60),
       ),
     );
   }
 }
 
-class StrokePoint {
-  final Offset offset;
-  final Color color;
-  final double strokeWidth;
-
-  StrokePoint({required this.offset, required this.color, required this.strokeWidth});
-
-  Map<String, dynamic> toJson() => {
-    'x': offset.dx,
-    'y': offset.dy,
-    'color': color.value,
-    'strokeWidth': strokeWidth,
-  };
-}
-
+// ─────────────────────────────────────────────────────────────
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;
@@ -325,19 +492,23 @@ class StrokePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final backgroundPaint = Paint()..color = Colors.white;
+    canvas.drawRect(Offset.zero & size, backgroundPaint);
+
     for (final stroke in [...strokes, currentStroke]) {
       for (int i = 0; i < stroke.length - 1; i++) {
-        final p1 = stroke[i];
-        final p2 = stroke[i + 1];
-        final paint = Paint()
-          ..color = p1.color
-          ..strokeWidth = p1.strokeWidth
-          ..strokeCap = StrokeCap.round;
-        canvas.drawLine(p1.offset, p2.offset, paint);
+        if (stroke[i].offset != null && stroke[i + 1].offset != null) {
+          final paint = Paint()
+            ..color = stroke[i].color
+            ..strokeWidth = stroke[i].strokeWidth
+            ..strokeCap = StrokeCap.round
+            ..blendMode = BlendMode.srcOver;
+          canvas.drawLine(stroke[i].offset!, stroke[i + 1].offset!, paint);
+        }
       }
     }
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

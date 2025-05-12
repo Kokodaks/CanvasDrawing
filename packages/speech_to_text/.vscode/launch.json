@@ -1,0 +1,33 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "speech_to_text",
+            "cwd": "speech_to_text",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "speech_to_text_platform_interface",
+            "cwd": "speech_to_text_platform_interface",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "example",
+            "cwd": "speech_to_text/example",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "web example",
+            "cwd": "multi_platform_example",
+            "program": "lib/speech_main.dart",
+            "request": "launch",
+            "type": "dart"
+        }
+    ]
+}

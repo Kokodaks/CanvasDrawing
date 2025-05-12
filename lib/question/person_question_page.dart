@@ -1,13 +1,23 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:path_provider/path_provider.dart';
+import '../pages/Person_IntroPage.dart';
 
 class PersonQuestionPage extends StatefulWidget {
   final bool isMan;
   final VoidCallback onQuestionComplete;
+  final int testId;
+  final int childId;
 
   const PersonQuestionPage({
     Key? key,
     required this.isMan,
     required this.onQuestionComplete,
+    required this.testId,
+    required this.childId,
   }) : super(key: key);
 
   @override
@@ -15,17 +25,11 @@ class PersonQuestionPage extends StatefulWidget {
 }
 
 class _PersonQuestionPageState extends State<PersonQuestionPage> {
-  final List<TextEditingController> controllers =
-  List.generate(9, (_) => TextEditingController());
+  final List<TextEditingController> controllers = List.generate(
+      7, (_) => TextEditingController());
 
   late final List<String> questions;
   int currentQuestion = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    questions = widget.isMan ? _manQuestions : _womanQuestions;
-  }
 
   final List<String> _manQuestions = [
     "1. 이 남자는 어떤 일을 하나요?",
@@ -47,114 +51,337 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
     "7. 그녀는 어떤 옷을 입고 있나요?",
   ];
 
-  void _nextQuestionOrSubmit() {
+  @override
+  void initState() {
+    super.initState();
+    super.initState();
+    _speech = stt.SpeechToText();
+    _initializeSpeechRecognition();
+    questions = widget.isMan ? _manQuestions : _womanQuestions;
+  }
+
+  Future<void> _submitAnswers() async {
+    final drawingType = widget.isMan ? "man" : "woman";
+
+    for (int i = 0; i < questions.length; i++) {
+      final uri = Uri.http('192.168.0.23:3000', '/test/addQnA');
+
+      try {
+        final response = await http.post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'testId': widget.testId,
+            'drawingType': drawingType,
+            'question': questions[i],
+            'answer': controllers[i].text,
+          }),
+        );
+
+        debugPrint('📤 질문 ${i + 1} 전송 상태: ${response.statusCode}');
+        debugPrint('📦 응답 내용: ${response.body}');
+      } catch (e) {
+        debugPrint('🛑 질문 ${i + 1} 전송 중 예외 발생: $e');
+      }
+    }
+  }
+
+  Future<void> _nextQuestionOrSubmit() async {
     if (currentQuestion < questions.length - 1) {
       setState(() {
         currentQuestion++;
       });
     } else {
+      // 질문 및 답변 출력 (디버깅용)
       for (int i = 0; i < questions.length; i++) {
         debugPrint("${questions[i]} → ${controllers[i].text}");
       }
 
-      widget.onQuestionComplete();
+      await _submitAnswers();
+      widget.onQuestionComplete(); // 다음 단계로 넘어가기
     }
   }
+
+  Future<File?> _getLatestScreenshot() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final files = Directory(dir.path)
+        .listSync()
+        .whereType<File>()
+        .where((f) =>
+    f.path.contains(widget.isMan ? 'men_drawing_' : 'men_drawing_') &&
+        f.path.endsWith('.png'))
+        .toList();
+
+    if (files.isEmpty) return null;
+
+    files.sort((a, b) => b.path.compareTo(a.path));
+    return files.first;
+  }
+
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+  bool _isInitialized = false;
+
+  void _initializeSpeechRecognition() async {
+    bool available = await _speech.initialize(
+      onStatus: (status) => print('🎙 상태: $status'),
+      onError: (error) => print('❌ 오류: $error'),
+    );
+    setState(() => _isInitialized = available);
+  }
+
+  void _listen() async {
+    if (!_isListening && _isInitialized) {
+      await _speech.cancel();
+      await Future.delayed(const Duration(milliseconds: 300));
+      setState(() => _isListening = true);
+
+      _speech.listen(
+        localeId: 'ko_KR',
+        listenMode: stt.ListenMode.dictation,
+        onResult: (result) {
+          setState(() {
+            controllers[currentQuestion].text = result.recognizedWords;
+          });
+        },
+      );
+    } else {
+      await _speech.stop();
+      setState(() => _isListening = false);
+    }
+  }
+
 
   @override
   void dispose() {
     for (var controller in controllers) {
       controller.dispose();
     }
+    _speech.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
-
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
-          // 배경
           Positioned.fill(
-            child: Image.asset(
-              'assets/Question_bg.png',
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset('assets/Question_bg.png', fit: BoxFit.cover),
           ),
 
-          // 질문 구름
-          Positioned(
-            top: screenHeight * 0.12,
-            left: screenWidth * 0.07,
-            right: screenWidth * 0.07,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Image.asset('assets/Cloud.png'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Text(
-                    questions[currentQuestion],
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+          // 질문 텍스트
+          Align(
+            alignment: const Alignment(0, -0.75),
+            child: FractionallySizedBox(
+              widthFactor: 0.8,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Image.asset(
+                    'assets/Cloud.png',
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24.0, vertical: 20),
+                    child: Text(
+                      questions[currentQuestion],
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontFamily: 'TJJoyofsingingEB_TTF',
+                        fontSize: 35,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black87,
+                      ),
+                      softWrap: true,
+                      overflow: TextOverflow.visible,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
-          // 텍스트 입력 박스 (네모)
-          Positioned(
-            top: screenHeight * 0.72,
-            left: screenWidth * 0.07,
-            right: screenWidth * 0.07,
-            child: Stack(
-              children: [
-                Image.asset(
-                  'assets/Rectangle.png',
-                  width: screenWidth * 0.85,
-                ),
-                Positioned.fill(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: TextField(
-                      controller: controllers[currentQuestion],
-                      maxLines: null,
-                      style: const TextStyle(fontSize: 16),
-                      decoration: const InputDecoration(
-                        hintText: "아이의 대답을 입력해주세요",
-                        border: InputBorder.none,
+          // 답변 입력 필드
+          Align(
+            alignment: const Alignment(0, 0.3),
+            child: FractionallySizedBox(
+              widthFactor: 0.9,
+              child: Stack(
+                children: [
+                  Image.asset('assets/Rectangle.png'),
+                  Positioned.fill(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: TextField(
+                        controller: controllers[currentQuestion],
+                        maxLines: null,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 30),
+                        enabled: !_isListening,
+                        decoration: const InputDecoration(
+                          hintText: "아이의 대답을 입력해주세요",
+                          hintStyle: TextStyle(fontSize: 30,
+                              color: Colors.grey),
+                          border: InputBorder.none,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
-          // 다음 버튼
-          Positioned(
-            bottom: 40,
-            left: 24,
-            right: 24,
-            child: ElevatedButton(
-              onPressed: _nextQuestionOrSubmit,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00796B),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+          // 마이크 + 초기화 + 이전 그림 다시보기
+          Align(
+            alignment: const Alignment(0, 0.65),
+            child: FutureBuilder<File?>(
+              future: _getLatestScreenshot(),
+              builder: (context, snapshot) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // 🔁 이전 그림 다시보기
+                    if (snapshot.hasData)
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  ScreenshotViewerPage(
+                                      imageFile: snapshot.data!),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(230),
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black26, blurRadius: 4)
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Image.asset(
+                                'assets/photo.png',
+                                width: 65,
+                                height: 65,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                    if (snapshot.hasData) const SizedBox(width: 30),
+
+                    // 🎤 마이크
+                    SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Image.asset(
+                              'assets/mic_bg.png', width: 80, height: 80),
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _isListening ? Colors.green : Colors
+                                    .transparent,
+                                width: 4,
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(10.0),
+                              child: GestureDetector(
+                                onTap: _isInitialized ? _listen : null,
+                                child: Image.asset(
+                                    'assets/mic.png', fit: BoxFit.contain),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 30),
+
+                    // 🔄 초기화
+                    GestureDetector(
+                      onTap: !_isListening
+                          ? () {
+                        setState(() {
+                          controllers[currentQuestion].clear();
+                        });
+                      }
+                          : null,
+                      child: SizedBox(
+                        width: 60,
+                        height: 60,
+                        child: Image.asset(
+                            'assets/reset_icon.png', fit: BoxFit.contain),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+
+          // 다음/제출 버튼
+          Align(
+            alignment: const Alignment(0, 0.9),
+            child: FractionallySizedBox(
+              widthFactor: 0.9,
+              child: ElevatedButton(
+                onPressed: _nextQuestionOrSubmit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00796B),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+                child: Text(
+                  currentQuestion < questions.length - 1 ? "다음으로 ➔" : "제출하기 ✅",
                 ),
               ),
-              child: Text(currentQuestion < questions.length - 1 ? "다음으로 ➡️" : "제출하기 ✅"),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+// ─── 전체화면 이미지 뷰어 ─────────────────────────────────────────
+class ScreenshotViewerPage extends StatelessWidget {
+  final File imageFile;
+  const ScreenshotViewerPage({required this.imageFile, Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Center(child: Image.file(imageFile)),
+          Positioned(
+            top: 40,
+            left: 20,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
             ),
           ),
         ],

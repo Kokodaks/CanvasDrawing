@@ -1,7 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'dart:typed_data';
 import 'package:http_parser/http_parser.dart';
 
 class ApiService {
@@ -17,10 +17,10 @@ class ApiService {
 
     request.files.add(
       http.MultipartFile.fromBytes(
-        'beforeErase',
-        pngBefore,
-        filename:'beforeErase.png',
-        contentType: MediaType('image', 'png')
+          'beforeErase',
+          pngBefore,
+          filename:'beforeErase.png',
+          contentType: MediaType('image', 'png')
       ),
     );
 
@@ -45,6 +45,8 @@ class ApiService {
     final response = await request.send();
     print("응답: ${response.statusCode}");
   }
+
+
 
   static Future<void> sendFinalToOpenAi(Uint8List pngFinal, List<Map<String, dynamic>> finalJsonOpenAi) async {
     final uri = Uri.parse('$_baseUrl/ai/sendFinalToOpenAi');
@@ -75,23 +77,38 @@ class ApiService {
 
   }
 
-  static Future<void> sendStrokesWithMulter(List<Map<String, dynamic>> allJsonData, List<Map<String, dynamic>> finalJsonData) async {
+
+
+
+
+  static Future<void> sendStrokesWithMulter(
+      List<Map<String, dynamic>> allJsonData,
+      List<Map<String, dynamic>> finalJsonData, {
+        required int testId, // 여기 int 타입
+        required int childId,
+      }) async {
     final uri = Uri.parse('$_baseUrl/reconstruction/sendStrokeData');
 
     final request = http.MultipartRequest("POST", uri);
 
+    // 🔶 일반 폼 필드로 testId와 childId 추가
+    request.fields['testId'] = testId.toString();
+    request.fields['childId'] = childId.toString();
+
+    // 🔶 drawing.json 첨부
     final jsonDrawing = jsonEncode(allJsonData);
-    final drawingBytes = utf8.encode(jsonDrawing); // 문자열을 바이트로 변환
+    final drawingBytes = utf8.encode(jsonDrawing);
 
     request.files.add(
       http.MultipartFile.fromBytes(
-        'drawing',      // 서버에서 받는 필드 이름
+        'drawing',
         drawingBytes,
         filename: 'drawing.json',
         contentType: MediaType('application', 'json'),
       ),
     );
 
+    // 🔶 final_drawing.json 첨부
     final finalJsonDrawing = jsonEncode(finalJsonData);
     final finalDrawingBytes = utf8.encode(finalJsonDrawing);
 
@@ -104,7 +121,12 @@ class ApiService {
       ),
     );
 
-    final response = await request.send();
-    print("응답: ${response.statusCode}");
+    // 🔶 전송 및 응답 확인
+    try {
+      final response = await request.send();
+      print("✅ 전송 완료: 상태코드 ${response.statusCode}");
+    } catch (e) {
+      print("❌ 전송 실패: $e");
+    }
   }
 }
