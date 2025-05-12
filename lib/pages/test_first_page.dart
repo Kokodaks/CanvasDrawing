@@ -169,7 +169,7 @@ class _TestFirstPageState extends State<TestFirstPage> {
                     child: ElevatedButton(
                       onPressed: submitInfo,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFFA726),
+                        backgroundColor: Colors.orange,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(30),

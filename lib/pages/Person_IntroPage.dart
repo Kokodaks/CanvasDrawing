@@ -197,7 +197,7 @@ class PersonIntroPage extends StatelessWidget {
               height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFA726),
+                  backgroundColor: Colors.orange,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                 ),
                 onPressed: () => _showGenderChoiceDialog(context),

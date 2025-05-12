@@ -167,7 +167,7 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
           Positioned.fill(
             child: Image.asset('assets/Question_bg.png', fit: BoxFit.cover),
           ),
-          // 미리보기 썸네일 버튼
+          // 왼쪽 상단 - 이전 그림 다시보기
           Align(
             alignment: const Alignment(-0.95, -0.95),
             child: FutureBuilder<File?>(
@@ -184,23 +184,36 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
                     );
                   },
                   child: Container(
-                    width: 60,
-                    height: 60,
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                      boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 6)],
+                      color: Colors.white.withAlpha(230), // withOpacity → withAlpha
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
                     ),
-                    child: ClipOval(
-                      child: Image.file(snapshot.data!, fit: BoxFit.cover),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/photo.png',
+                          width: 24,
+                          height: 24,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          '이전 그림 다시보기',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );
               },
             ),
           ),
-          // 질문 및 입력 폼
           Align(
             alignment: const Alignment(0, -0.75),
             child: FractionallySizedBox(

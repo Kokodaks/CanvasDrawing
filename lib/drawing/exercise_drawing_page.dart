@@ -72,14 +72,14 @@ class _ExerciseDrawingPageState extends State<ExerciseDrawingPage> {
 
   double _calculateStrokeWidthFromPressure(double pressure) {
     const double minWidth = 2.0;
-    const double maxWidth = 20.0;
+    const double maxWidth = 10.0;
     return minWidth + (maxWidth - minWidth) * pressure.clamp(0.0, 1.0);
   }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final canvasWidth = screenWidth * 0.75;
+    final canvasWidth = screenWidth * 0.8;
     final canvasHeight = canvasWidth * (297 / 210);
 
     return Scaffold(
@@ -96,8 +96,9 @@ class _ExerciseDrawingPageState extends State<ExerciseDrawingPage> {
               child: Text(
                 "테스트 페이지입니다",
                 style: TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
+                  fontFamily: 'TJJoyofsingingEB_TTF',
+                  fontSize: 35,
+                  fontWeight: FontWeight.w900,
                   color: Colors.black87,
                   shadows: [
                     Shadow(

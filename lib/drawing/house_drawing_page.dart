@@ -1,5 +1,7 @@
 import 'dart:async';
-import 'dart:ui' as ui;
+import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -45,6 +47,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
   int    strokeStartTime = 0;
   int    strokeOrder     = 0;
+  double eraserSize = 10.0;
   bool   isErasing       = false;
   Color  selectedColor   = Colors.black;
 
@@ -115,9 +118,9 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   }
 
   // ─── 드로잉 입력 ────────────────────────────────────────────
-  void startNewStroke(Offset globalPos, int time, double pressure) {
-    if (!_isInCanvas(globalPos)) return;
-    final position = _toLocal(globalPos);
+  void startNewStroke(Offset globalPosition, int time, double pressure) {
+    if (!_isInCanvas(globalPosition)) return;
+    final position = _toLocal(globalPosition);
     currentStroke = [
       StrokePoint(
         offset: position,
@@ -126,7 +129,6 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
         t: time,
       )
     ];
-    print('[PTR] newStroke (#${strokeOrder + 1}) at $position  erase=$isErasing');
     if (_modeJustChanged && !isErasing) {
       _takeScreenshotDirectly();
       _modeJustChanged = false;
@@ -151,66 +153,102 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     _restartDebounceTimer();
   }
 
-  void _endStroke() {
-    if (currentStroke.isEmpty) return;
-    strokeOrder++;
+  void endStroke() {
+    if (currentStroke.isNotEmpty) {
+      // strokeOrder는 외부에서 이미 증가되었다고 가정
+      data.add(StrokeData(
+        isErasing: isErasing,
+        strokeOrder: strokeOrder,
+        strokeStartTime: strokeStartTime,
+        points: currentStroke,
+        color: selectedColor,
+      ));
+      finalDrawingDataOnly.add(StrokeData(
+        isErasing: isErasing,
+        strokeOrder: strokeOrder,
+        strokeStartTime: strokeStartTime,
+        points: currentStroke,
+        color: selectedColor,
+      ));
+      strokes.add(currentStroke);
+      currentStroke = [];
+    }
+  }
+  Future<Uint8List?> _takeScreenshotDirectly() async {
+    try {
+      RenderRepaintBoundary boundary =
+      _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      var image = await boundary.toImage(pixelRatio: 3.0);
+      ByteData? byteData = await image.toByteData(format: ImageByteFormat.png);
+      Uint8List pngBytes = byteData!.buffer.asUint8List();
 
-    final sd = StrokeData(
-      isErasing: isErasing,
-      strokeOrder: strokeOrder,
-      strokeStartTime: strokeStartTime,
-      points: currentStroke,
-      color: selectedColor,
-    );
+      final dir = Platform.isIOS
+          ? await getApplicationDocumentsDirectory()
+          : Directory('/storage/emulated/0/Download');
+      final path = '${dir.path}/Men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File(path);
+      await file.writeAsBytes(pngBytes);
 
-    data.add(sd);
-    finalDrawingDataOnly.add(sd);
-    strokes.add(currentStroke);
-
-    print('[DRAW] endStroke #$strokeOrder  totalStrokes=${strokes.length}');
-    currentStroke = [];
+      print('🖼️ 스크린샷 저장 완료: $path');
+      return pngBytes;
+    } catch (e) {
+      print('스크린샷 실패: $e');
+      return null;
+    }
   }
 
-  void eraseStrokeAt(Offset globalTapPos) {
-    if (!_isInCanvas(globalTapPos)) return;
-    final tap = _toLocal(globalTapPos);
+  void eraseStrokeAt(Offset globalTapPosition) {
+    if (!_isInCanvas(globalTapPosition)) return;
+    final tapPosition = _toLocal(globalTapPosition);
 
-    final target = strokes.firstWhereOrNull(
-          (stroke) => stroke.any(
-            (p) => p.offset != null && (p.offset! - tap).distance <= 20,
-      ),
-    );
-
-    if (target != null) {
-      data.add(
-        StrokeData(
-          isErasing: true,
-          strokeOrder: ++strokeOrder,
-          strokeStartTime: DateTime.now().millisecondsSinceEpoch,
-          points: target,
-          color: selectedColor,
-        ),
-      );
-      strokes.remove(target);
-      finalDrawingDataOnly.removeWhere((sd) => identical(sd.points, target));
-      print('[DRAW] eraseStroke len=${target.length}  remain=${strokes.length}');
-    }
-
-
-    setState(() {
-      // UI 갱신을 강제로 호출하여 바로 지운 내용이 반영되도록 함
+    int beforeCount = strokes.length;
+    final toBeErased = strokes.firstWhereOrNull((stroke) {
+      return stroke.any((point) =>
+      point.offset != null &&
+          (point.offset! - tapPosition).distance <= eraserSize);
     });
 
-      _restartDebounceTimer();
+    if(toBeErased != null){
+      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
     }
 
+    setState(() {
+      strokes.removeWhere((stroke) {
+        return stroke.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+      finalDrawingDataOnly.removeWhere((strokeData) {
+        return strokeData.points.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize);
+      });
+    });
+
+    int afterCount = strokes.length;
+
+    _takeScreenshotDirectly().then((pngBefore) {
+      if(isErasing && beforeCount > afterCount){
+        _takeScreenshotDirectly().then((pngAfter) {
+          if (pngBefore != null && pngAfter != null) {
+            final allJsonData = data.map((stroke) => stroke.toJsonOpenAi()).toList();
+            ApiService.sendToOpenAi(pngBefore, pngAfter, allJsonData);
+          }
+        });
+      }
+    });
+
+    _restartDebounceTimer();
+  }
 
   // ─── 캡처 타이머 & 길이 기반 캡처 ───────────────────────────
   void _restartDebounceTimer() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted && (strokes.isNotEmpty || currentStroke.isNotEmpty)) {
-        _takeScreenshotDirectly();
+    _debounceTimer = Timer(const Duration(seconds: 5), () async {
+      if (mounted) {
+        if (strokes.isNotEmpty || currentStroke.isNotEmpty) {
+          await _takeScreenshotDirectly();
+        }
       }
     });
   }
@@ -225,43 +263,33 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   // ─── 유틸 ───────────────────────────────────────────────────
   double _calculateStrokeWidthFromPressure(double pressure) {
     const double minWidth = 2.0;
-    const double maxWidth = 20.0;
-    return minWidth + (maxWidth - minWidth) * pressure.clamp(0.0, 1.0);
+    const double maxWidth = 10.0;
+    final p = pressure.clamp(0.0, 1.0);
+    return minWidth + (maxWidth - minWidth) * p;
   }
 
-  Offset _toLocal(Offset global) {
-    final rb = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    return rb?.globalToLocal(global) ?? Offset.zero;
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 
-  bool _isInCanvas(Offset global) {
-    final rb = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
-    if (rb == null) return false;
-    final local = rb.globalToLocal(global);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= rb.size.width &&
-        local.dy <= rb.size.height;
+  Offset _toLocal(Offset globalPosition) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return Offset.zero;
+    return renderBox.globalToLocal(globalPosition);
   }
 
-  // ─── 스크린샷 저장 ─────────────────────────────────────────
-  Future<void> _takeScreenshotDirectly() async {
-    try {
-      final boundary =
-      _repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3);
-      final png   = (await image.toByteData(format: ui.ImageByteFormat.png))!
-          .buffer.asUint8List();
-
-      final dir = Platform.isIOS
-          ? await getApplicationDocumentsDirectory()
-          : Directory('/storage/emulated/0/Download');
-      final path = '${dir.path}/House_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
-      await File(path).writeAsBytes(png);
-      print('🖼️ 스크린샷 저장 완료: $path');
-    } catch (e) {
-      print('스크린샷 실패: $e');
-    }
+  bool _isInCanvas(Offset globalPosition) {
+    final renderBox =
+    _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return false;
+    final localPosition = renderBox.globalToLocal(globalPosition);
+    return localPosition.dx >= 0 &&
+        localPosition.dy >= 0 &&
+        localPosition.dx <= renderBox.size.width &&
+        localPosition.dy <= renderBox.size.height;
   }
 
   // ─── 영상 업로드 ───────────────────────────────────────────
@@ -348,7 +376,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                   }
                 },
                 onPointerUp: (_) {
-                  if (!isErasing) setState(_endStroke);
+                  if (!isErasing) setState(endStroke);
                 },
                 child: Container(
                   key: _canvasKey,
@@ -498,22 +526,24 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 class StrokePainter extends CustomPainter {
   final List<List<StrokePoint>> strokes;
   final List<StrokePoint> currentStroke;
+
   StrokePainter(this.strokes, this.currentStroke);
 
   @override
   void paint(Canvas canvas, Size size) {
+    final backgroundPaint = Paint()..color = Colors.white;
+    canvas.drawRect(Offset.zero & size, backgroundPaint);
+
     for (final stroke in [...strokes, currentStroke]) {
       for (int i = 0; i < stroke.length - 1; i++) {
-        final p1 = stroke[i];
-        final p2 = stroke[i + 1];
-        canvas.drawLine(
-          p1.offset!,
-          p2.offset!,
-          Paint()
-            ..color = p1.color
-            ..strokeWidth = p1.strokeWidth
-            ..strokeCap = StrokeCap.round,
-        );
+        if (stroke[i].offset != null && stroke[i + 1].offset != null) {
+          final paint = Paint()
+            ..color = stroke[i].color
+            ..strokeWidth = stroke[i].strokeWidth
+            ..strokeCap = StrokeCap.round
+            ..blendMode = BlendMode.srcOver;
+          canvas.drawLine(stroke[i].offset!, stroke[i + 1].offset!, paint);
+        }
       }
     }
   }

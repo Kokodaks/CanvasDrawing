@@ -227,7 +227,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
   // ─── 유틸 ───────────────────────────────────────────────────
   double _calculateStrokeWidthFromPressure(double pressure) {
     const double minWidth = 2.0;
-    const double maxWidth = 20.0;
+    const double maxWidth = 10.0;
     return minWidth + (maxWidth - minWidth) * pressure.clamp(0.0, 1.0);
   }
 

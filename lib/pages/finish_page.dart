@@ -56,7 +56,7 @@ class FinishPage extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: () => _markAsCompletedAndExit(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFA726),
+                    backgroundColor: Colors.orange,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
                     ),
