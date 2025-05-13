@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:ui' as ui;
+import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -57,13 +57,13 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
 
   Timer?  _debounceTimer;
   bool    _modeJustChanged   = false;
-  double  _accumulatedLength = 0;
+  //double  _accumulatedLength = 0;
 
   // ─── 녹화 상태 ─────────────────────────────────────────────
-  bool              isRecording = false;
+  bool  isRecording = false;
   bool _onCompleteHandled = false;
-  bool              _recordingInProgress = false;
-  bool              _uploadInProgress    = false;
+  bool _recordingInProgress = false;
+  bool _uploadInProgress = false;
   late Completer<void> _videoDone;
 
   // ───────────────────────────────────────────────────────────
@@ -103,6 +103,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
       _recordingInProgress = false;
     }
   }
+
   Future<void> _stopRecordingSafely() async {
     if (!_recordingInProgress) return;
     print('[REC] stopRecordingSafely() 호출');
@@ -127,10 +128,10 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
       )
     ];
     if (_modeJustChanged && !isErasing) {
-      _takeScreenshotDirectly();
+      // _takeScreenshotDirectly(); // 디바운싱 제거에 따라 주석 처리
       _modeJustChanged = false;
     }
-    _restartDebounceTimer();
+    // _restartDebounceTimer(); // 디바운싱 제거
   }
 
   void addPointToStroke(Offset globalPosition, int time, double pressure) {
@@ -138,23 +139,18 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     final position = _toLocal(globalPosition);
     final width = _calculateStrokeWidthFromPressure(pressure);
 
-    if (currentStroke.isNotEmpty) {
-      final prev = currentStroke.last.offset!;
-      _accumulatedLength += (position - prev).distance;
-    }
-
     currentStroke.add(
       StrokePoint(
-          offset: position,
-          color: selectedColor,
-          strokeWidth: width,
-          t: time
+        offset: position,
+        color: selectedColor,
+        strokeWidth: width,
+        t: time,
       ),
     );
-
-    _handleLengthBasedCapture();
-    _restartDebounceTimer();
   }
+
+  // _handleLengthBasedCapture(); // 중간 캡처 제거
+  // _restartDebounceTimer(); // 디바운싱 제거
 
   void endStroke() {
     if (currentStroke.isNotEmpty) {
@@ -171,14 +167,14 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
       RenderRepaintBoundary boundary =
       _repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       var image = await boundary.toImage(pixelRatio: 3.0);
-      ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      ByteData? byteData = await image.toByteData(format: ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
 
       final dir = Platform.isAndroid
           ? Directory('/storage/emulated/0/Download')
           : Directory('/tmp');
 
-      final path = '${dir.path}/house_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final path = '${dir.path}/men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File(path);
       await file.writeAsBytes(pngBytes);
 
@@ -194,17 +190,18 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     if (!_isInCanvas(globalTapPosition)) return;
     final tapPosition = _toLocal(globalTapPosition);
 
-    int beforeCount = strokes.length;
-    final toBeErased = strokes.firstWhereOrNull((stroke) {
-      return stroke.any((point) =>
-      point.offset != null &&
-          (point.offset! - tapPosition).distance <= eraserSize);
-    });
+    final toBeErased = strokes.firstWhereOrNull((stroke) =>
+        stroke.any((point) =>
+        point.offset != null &&
+            (point.offset! - tapPosition).distance <= eraserSize));
 
-    if(toBeErased != null){
-      data.add(StrokeData(isErasing: isErasing, strokeOrder: strokeOrder, strokeStartTime: strokeStartTime, points: toBeErased, color: selectedColor));
+    if (toBeErased != null) {
+      data.add(StrokeData(isErasing: isErasing,
+          strokeOrder: strokeOrder,
+          strokeStartTime: strokeStartTime,
+          points: toBeErased,
+          color: selectedColor));
     }
-
     setState(() {
       strokes.removeWhere((stroke) {
         return stroke.any((point) =>
@@ -217,22 +214,21 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
             (point.offset! - tapPosition).distance <= eraserSize);
       });
     });
-
-    int afterCount = strokes.length;
-
-    _takeScreenshotDirectly().then((pngBefore) {
-      if(isErasing && beforeCount > afterCount){
-        _takeScreenshotDirectly().then((pngAfter) {
-          if (pngBefore != null && pngAfter != null) {
-            final allJsonData = data.map((stroke) => stroke.toJsonOpenAi()).toList();
-            ApiService.sendToOpenAi(pngBefore, pngAfter, allJsonData);
-          }
-        });
-      }
-    });
-
-    _restartDebounceTimer();
   }
+    // int afterCount = strokes.length;
+//
+// _takeScreenshotDirectly().then((pngBefore) {
+//   if(isErasing && beforeCount > afterCount){
+//     _takeScreenshotDirectly().then((pngAfter) {
+//       if (pngBefore != null && pngAfter != null) {
+//         final allJsonData = data.map((stroke) => stroke.toJsonOpenAi()).toList();
+//         // ApiService.sendToOpenAi(pngBefore, pngAfter, allJsonData);
+//       }
+//     });
+//   }
+// });
+//
+// _restartDebounceTimer();
 
   Offset _toLocal(Offset globalPosition) {
     final renderBox =
@@ -252,10 +248,11 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
         localPosition.dy <= renderBox.size.height;
   }
 
-  // ─── 캡처 타이머 & 길이 기반 캡처 ───────────────────────────
+    // 디바운싱 함수 전체 주석 처리
+    /*
   void _restartDebounceTimer() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 5), () async {
+    _debounceTimer = Timer(const Duration(seconds: 15), () async {
       if (mounted) {
         if (strokes.isNotEmpty || currentStroke.isNotEmpty) {
           await _takeScreenshotDirectly();
@@ -270,218 +267,223 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
       _accumulatedLength = 0;
     }
   }
+  */
 
   // ─── 유틸 ───────────────────────────────────────────────────
-  double _calculateStrokeWidthFromPressure(double pressure) {
-    const double minWidth = 2.0;
-    const double maxWidth = 10.0;
-    final p = pressure.clamp(0.0, 1.0);
-    return minWidth + (maxWidth - minWidth) * p;
-  }
-
-  @override
-  void dispose() {
-    _debounceTimer?.cancel();
-    super.dispose();
-  }
-
-
-  // ─── 영상 업로드 ───────────────────────────────────────────
-  Future<void> uploadVideo(String path) async {
-    if (_uploadInProgress) return;
-    _uploadInProgress = true;
-
-    final uri = Uri.parse('http://3.37.122.29:3000/video/upload');
-    final req = http.MultipartRequest('POST', uri)
-      ..fields['testId'] = widget.testId.toString()
-      ..fields['name']   = 'house_drawing_recording';
-
-    try {
-      req.files.add(await http.MultipartFile.fromPath('video', path));
-      final res  = await req.send();
-      final body = await res.stream.bytesToString();
-      print('[API] 상태코드=${res.statusCode} body=$body');
-    } catch (e) {
-      print('[API] 업로드 예외: $e');
-    } finally {
-      _uploadInProgress = false;
+    double _calculateStrokeWidthFromPressure(double pressure) {
+      const double minWidth = 2.0;
+      const double maxWidth = 10.0;
+      final p = pressure.clamp(0.0, 1.0);
+      return minWidth + (maxWidth - minWidth) * p;
     }
-  }
 
-  // ─── UI(Build) ────────────────────────────────────────────
-  @override
-  Widget build(BuildContext context) {
-    final sw = MediaQuery
-        .of(context)
-        .size
-        .width;
-    final canvasW = sw * 0.8; // 기존 0.65보다 더 크게 확장
-    final canvasH = canvasW * (297 / 210); // 비율은 유지 (A4 비율)
+    @override
+    void dispose() {
+      _debounceTimer?.cancel();
+      super.dispose();
+    }
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // ─── 배경 이미지 ───
-          Positioned.fill(
-            child: Image.asset('assets/exercise.png', fit: BoxFit.cover),
-          ),
 
-          // ✅ 그림판 위쪽에 이미지 배치
-          Positioned(
-            top: 70,
-            left: 45,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Image.asset('assets/house_tree.png', width: 80, height: 80),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Image.asset('assets/남자를.png', width: 60),
-                    const SizedBox(height: 4),
-                    Image.asset('assets/그려봐!.png', width: 80),
-                  ],
-                ),
-              ],
+    // ─── 영상 업로드 ───────────────────────────────────────────
+    Future<void> uploadVideo(String path) async {
+      if (_uploadInProgress) return;
+      _uploadInProgress = true;
+
+      final uri = Uri.parse('http://3.37.122.29:3000/video/upload');
+      final req = http.MultipartRequest('POST', uri)
+        ..fields['testId'] = widget.testId.toString()
+        ..fields['name']   = 'men_drawing_recording';
+
+      try {
+        req.files.add(await http.MultipartFile.fromPath('video', path));
+        final res  = await req.send();
+        final body = await res.stream.bytesToString();
+        print('[API] 상태코드=${res.statusCode} body=$body');
+      } catch (e) {
+        print('[API] 업로드 예외: $e');
+      } finally {
+        _uploadInProgress = false;
+      }
+    }
+
+    // ─── UI(Build) ────────────────────────────────────────────
+    @override
+    Widget build(BuildContext context) {
+      final sw = MediaQuery
+          .of(context)
+          .size
+          .width;
+      final canvasW = sw * 0.8; // 기존 0.65보다 더 크게 확장
+      final canvasH = canvasW * (297 / 210); // 비율은 유지 (A4 비율)
+
+      return Scaffold(
+        body: Stack(
+          children: [
+            // ─── 배경 이미지 ───
+            Positioned.fill(
+              child: Image.asset('assets/exercise.png', fit: BoxFit.cover),
             ),
-          ),
 
-          // ─── 그림판 (RepaintBoundary) ───
-          Center(
-            child: RepaintBoundary(
-              key: _repaintKey,
-              child: Listener(
-                onPointerDown: (e) {
-                  strokeStartTime = DateTime
-                      .now()
-                      .millisecondsSinceEpoch;
-                  isErasing
-                      ? eraseStrokeAt(e.position)
-                      : setState(() =>
-                      startNewStroke(e.position, 0, e.pressure));
-                },
-                onPointerMove: (PointerMoveEvent event) {
-                  final position = event.position;
-                  final currentTime = DateTime.now().millisecondsSinceEpoch;
-                  final t = currentTime - strokeStartTime;
-
-                  if (!isErasing) {
-                    setState(() => addPointToStroke(position, t, event.pressure));
-                  }
-                },
-                onPointerUp: (_) {
-                  if (!isErasing) {
-                    setState(() => endStroke());
-                  }
-                },
-                child: Container(
-                  key: _canvasKey,
-                  width: canvasW,
-                  height: canvasH,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.orange, width: 3),
+            // ✅ 그림판 위쪽에 이미지 배치
+            Positioned(
+              top: 70,
+              left: 45,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Image.asset('assets/house_tree.png', width: 80, height: 80),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Image.asset('assets/남자를.png', width: 60),
+                      const SizedBox(height: 4),
+                      Image.asset('assets/그려봐!.png', width: 80),
+                    ],
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: CustomPaint(
-                      painter: StrokePainter(strokes, currentStroke),
+                ],
+              ),
+            ),
+
+            // ─── 그림판 (RepaintBoundary) ───
+            Center(
+              child: RepaintBoundary(
+                key: _repaintKey,
+                child: Listener(
+                  onPointerDown: (e) {
+                    strokeStartTime = DateTime
+                        .now()
+                        .millisecondsSinceEpoch;
+                    isErasing
+                        ? eraseStrokeAt(e.position)
+                        : setState(() =>
+                        startNewStroke(e.position, 0, e.pressure));
+                  },
+                  onPointerMove: (PointerMoveEvent event) {
+                    final position = event.position;
+                    final currentTime = DateTime.now().millisecondsSinceEpoch;
+                    final t = currentTime - strokeStartTime;
+
+                    if (!isErasing) {
+                      setState(() => addPointToStroke(position, t, event.pressure));
+                    }
+                  },
+                  onPointerUp: (_) {
+                    if (!isErasing) {
+                      setState(() => endStroke());
+                    }
+                  },
+                  child: Container(
+                    key: _canvasKey,
+                    width: canvasW,
+                    height: canvasH,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.orange, width: 3),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: CustomPaint(
+                        painter: StrokePainter(strokes, currentStroke),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // ─── 도구 버튼 ───
-          Positioned(
-            right: 32,
-            top: MediaQuery
-                .of(context)
-                .size
-                .height / 2 - 80,
-            child: Column(
-              children: [
-                _toolButton('assets/pencil.png', () {
-                  setState(() {
-                    isErasing = false;
-                    selectedColor = Colors.black;
-                    _modeJustChanged = true;
-                  });
-                }, !isErasing),
-                const SizedBox(height: 24),
-                _toolButton('assets/eraser.png', () {
-                  setState(() {
-                    isErasing = true;
-                    _modeJustChanged = true;
-                  });
-                }, isErasing),
-              ],
+            // ─── 도구 버튼 ───
+            Positioned(
+              right: 32,
+              top: MediaQuery
+                  .of(context)
+                  .size
+                  .height / 2 - 80,
+              child: Column(
+                children: [
+                  _toolButton('assets/pencil.png', () {
+                    setState(() {
+                      isErasing = false;
+                      selectedColor = Colors.black;
+                      _modeJustChanged = true;
+                    });
+                  }, !isErasing),
+                  const SizedBox(height: 24),
+                  _toolButton('assets/eraser.png', () {
+                    setState(() {
+                      isErasing = true;
+                      _modeJustChanged = true;
+                    });
+                  }, isErasing),
+                ],
+              ),
             ),
-          ),
 
-          // ─── 완료 버튼 ───
-          Positioned(
-            bottom: 40,
-            left: 60,
-            right: 60,
-            child: ElevatedButton(
-              onPressed: () async {
-                await _stopRecordingSafely();
-                await _takeScreenshotDirectly();
+            // ─── 완료 버튼 ───
+            Positioned(
+              bottom: 40,
+              left: 60,
+              right: 60,
+              child: ElevatedButton(
+                onPressed: () async {
+                  await _stopRecordingSafely();
+                  final pngFinal = await _takeScreenshotDirectly();
+                  final finalJsonOpenAi = finalDrawingDataOnly.map((e) => e.toJsonOpenAi(widget.testId)).toList();
+                  if(pngFinal != null){
+                    ApiService.sendFinalToOpenAi(pngFinal, finalJsonOpenAi, widget.testId, widget.childId, "men");
+                  }
 
-                final allJson = data.map((e) => e.toJson()).toList();
-                final finalJson = finalDrawingDataOnly.map((e) => e.toJson())
-                    .toList();
-                ApiService.sendStrokesWithMulter(
-                  allJson,
-                  finalJson,
-                  testId: widget.testId,
-                  childId: widget.childId,
-                );
-                widget.onDrawingComplete();
+                  final allJson = data.map((e) => e.toJson(widget.testId)).toList();
+                  final finalJson = finalDrawingDataOnly.map((e) => e.toJson(widget.testId))
+                      .toList();
+                  ApiService.sendStrokesWithMulter(
+                      allJson,
+                      finalJson,
+                      widget.testId,
+                      widget.childId,
+                      "men"
+                  );
 
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: const Text('다 그렸어!', style: TextStyle(fontSize: 18)),
               ),
-              child: const Text('다 그렸어!', style: TextStyle(fontSize: 18)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  // ─── 툴 버튼 헬퍼 ───────────────────────────────────────────
-  Widget _toolButton(String asset, VoidCallback onTap, bool selected) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: selected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
-          boxShadow: [
-            BoxShadow(
-              color: (selected ? Colors.orangeAccent : Colors.black26).withOpacity(0.6),
-              blurRadius: 10,
-              offset: const Offset(2, 4),
             ),
           ],
         ),
-        child: Image.asset(asset, width: 60, height: 60),
-      ),
-    );
+      );
+    }
+
+
+    // ─── 툴 버튼 헬퍼 ───────────────────────────────────────────
+    Widget _toolButton(String asset, VoidCallback onTap, bool selected) {
+      return GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: selected ? Border.all(color: Colors.orangeAccent, width: 3) : null,
+            boxShadow: [
+              BoxShadow(
+                color: (selected ? Colors.orangeAccent : Colors.black26).withOpacity(0.6),
+                blurRadius: 10,
+                offset: const Offset(2, 4),
+              ),
+            ],
+          ),
+          child: Image.asset(asset, width: 60, height: 60),
+        ),
+      );
+    }
   }
-}
 
 // ─────────────────────────────────────────────────────────────
 class StrokePainter extends CustomPainter {

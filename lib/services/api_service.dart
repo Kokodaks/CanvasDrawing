@@ -7,7 +7,9 @@ import 'package:http_parser/http_parser.dart';
 class ApiService {
   static final _baseUrl = dotenv.env['IP_ADDR'];
 
-  static Future<void> sendToOpenAi(Uint8List pngBefore, Uint8List pngAfter,List<Map<String, dynamic>> allJsonData)async{
+// ⛔️ 현재 디바운싱 기능 삭제로 인해 사용되지 않음
+/*
+  static Future<void> sendToOpenAi(Uint8List duringPng, List<Map<String, dynamic>> allJsonData, int testId, int childId, String type)async{
     final uri = Uri.parse('$_baseUrl/ai/sendToOpenAi');
 
     final request = http.MultipartRequest("POST", uri);
@@ -15,20 +17,15 @@ class ApiService {
     final currentDrawing = jsonEncode(allJsonData);
     final currentDrawingBytes = utf8.encode(currentDrawing);
 
-    request.files.add(
-      http.MultipartFile.fromBytes(
-          'beforeErase',
-          pngBefore,
-          filename:'beforeErase.png',
-          contentType: MediaType('image', 'png')
-      ),
-    );
+    request.fields['type'] = type;
+    request.fields['testId'] = testId.toString();
+    request.fields['childId'] = childId.toString();
 
     request.files.add(
       http.MultipartFile.fromBytes(
-          'afterErase',
-          pngAfter,
-          filename:'afterErase.png',
+          'duringPng',
+          duringPng,
+          filename:'beforeErase.png',
           contentType: MediaType('image', 'png')
       ),
     );
@@ -45,15 +42,19 @@ class ApiService {
     final response = await request.send();
     print("응답: ${response.statusCode}");
   }
+ */
 
 
-
-  static Future<void> sendFinalToOpenAi(Uint8List pngFinal, List<Map<String, dynamic>> finalJsonOpenAi) async {
+  static Future<void> sendFinalToOpenAi(Uint8List pngFinal, List<Map<String, dynamic>> finalJsonOpenAi, int testId, int childId, String type) async {
     final uri = Uri.parse('$_baseUrl/ai/sendFinalToOpenAi');
     final request = http.MultipartRequest("POST", uri);
 
     final finalJsonDrawing = jsonEncode(finalJsonOpenAi);
     final finalDrawingBytes = utf8.encode(finalJsonDrawing);
+
+    request.fields['type'] = type;
+    request.fields['testId'] = testId.toString();
+    request.fields['childId'] = childId.toString();
 
     request.files.add(
       http.MultipartFile.fromBytes(
@@ -77,21 +78,16 @@ class ApiService {
 
   }
 
-
-
-
-
   static Future<void> sendStrokesWithMulter(
       List<Map<String, dynamic>> allJsonData,
-      List<Map<String, dynamic>> finalJsonData, {
-        required int testId, // 여기 int 타입
-        required int childId,
-      }) async {
+      List<Map<String, dynamic>> finalJsonData,
+      int testId, int childId, String type) async {
     final uri = Uri.parse('$_baseUrl/reconstruction/sendStrokeData');
 
     final request = http.MultipartRequest("POST", uri);
 
     // 🔶 일반 폼 필드로 testId와 childId 추가
+    request.fields['type'] = type;
     request.fields['testId'] = testId.toString();
     request.fields['childId'] = childId.toString();
 

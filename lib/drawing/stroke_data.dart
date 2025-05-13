@@ -21,7 +21,8 @@ class StrokeData {
     }
   }
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson(int testId) => {
+    "testId" : testId,
     "isErasing": isErasing,
     "strokeOrder": strokeOrder,
     "strokeStartTime": strokeStartTime,
@@ -29,7 +30,8 @@ class StrokeData {
     "points": points.map((p) => p.toJson()).toList(),
   };
 
-  Map<String, dynamic> toJsonOpenAi() =>{
+  Map<String, dynamic> toJsonOpenAi(int testId) =>{
+    "testId" : testId,
     "isErasing": isErasing,
     "strokeOrder": strokeOrder,
     "strokeStartTime": strokeStartTime,

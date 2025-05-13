@@ -18,7 +18,7 @@ class _TestFirstPageState extends State<TestFirstPage> {
     print('✅ [submitInfo] 함수 호출됨');
 
     final name = nameController.text.trim();
-    final rrn = _rrnRaw;
+    final rrn = _rrnRaw.trim();
     print('📨 입력 받은 name: $name / rrn: $rrn');
 
     if (name.isEmpty || rrn.length != 13) {
