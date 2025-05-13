@@ -192,7 +192,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     if (!_isInCanvas(globalTapPosition)) return;
     final tapPosition = _toLocal(globalTapPosition);
 
-    int beforeCount = strokes.length;
+    // int beforeCount = strokes.length;
     final toBeErased = strokes.firstWhereOrNull((stroke) {
       return stroke.any((point) =>
       point.offset != null &&
@@ -216,20 +216,20 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       });
     });
 
-    int afterCount = strokes.length;
-
-    _takeScreenshotDirectly().then((pngBefore) {
-      if(isErasing && beforeCount > afterCount){
-        _takeScreenshotDirectly().then((pngAfter) {
-          if (pngBefore != null && pngAfter != null) {
-            final allJsonData = data.map((stroke) => stroke.toJsonOpenAi()).toList();
-            ApiService.sendToOpenAi(pngBefore, pngAfter, allJsonData);
-          }
-        });
-      }
-    });
-
-    _restartDebounceTimer();
+    // int afterCount = strokes.length;
+    //
+    // _takeScreenshotDirectly().then((pngBefore) {
+    //   if(isErasing && beforeCount > afterCount){
+    //     _takeScreenshotDirectly().then((pngAfter) {
+    //       if (pngBefore != null && pngAfter != null) {
+    //         final allJsonData = data.map((stroke) => stroke.toJsonOpenAi()).toList();
+    //         // ApiService.sendToOpenAi(pngBefore, pngAfter, allJsonData);
+    //       }
+    //     });
+    //   }
+    // });
+    //
+    // _restartDebounceTimer();
   }
 
   Offset _toLocal(Offset globalPosition) {
@@ -253,10 +253,14 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   // ─── 캡처 타이머 & 길이 기반 캡처 ───────────────────────────
   void _restartDebounceTimer() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 5), () async {
+    _debounceTimer = Timer(const Duration(seconds: 15), () async {
       if (mounted) {
         if (strokes.isNotEmpty || currentStroke.isNotEmpty) {
-          await _takeScreenshotDirectly();
+          if(mounted){
+            if(strokes.isNotEmpty || currentStroke.isNotEmpty){
+              await _takeScreenshotDirectly();
+            }
+          }
         }
       }
     });
@@ -427,16 +431,21 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
             child: ElevatedButton(
               onPressed: () async {
                 await _stopRecordingSafely();
-                await _takeScreenshotDirectly();
+                final pngFinal = await _takeScreenshotDirectly();
+                final finalJsonOpenAi = finalDrawingDataOnly.map((e) => e.toJsonOpenAi(widget.testId)).toList();
+                if(pngFinal != null){
+                  ApiService.sendFinalToOpenAi(pngFinal, finalJsonOpenAi, widget.testId, widget.childId, "house");
+                }
 
-                final allJson = data.map((e) => e.toJson()).toList();
-                final finalJson = finalDrawingDataOnly.map((e) => e.toJson())
+                final allJson = data.map((e) => e.toJson(widget.testId)).toList();
+                final finalJson = finalDrawingDataOnly.map((e) => e.toJson(widget.testId))
                     .toList();
                 ApiService.sendStrokesWithMulter(
                   allJson,
                   finalJson,
-                  testId: widget.testId,
-                  childId: widget.childId,
+                  widget.testId,
+                  widget.childId,
+                  "house"
                 );
                 Navigator.push(
                   context,
