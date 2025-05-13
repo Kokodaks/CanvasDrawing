@@ -5,7 +5,7 @@ import 'pages/test_first_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(); // 환경 변수 로드
+  await dotenv.load(fileName: ".env"); // 환경 변수 로드
 
   // 세로 모드만 허용
   await SystemChrome.setPreferredOrientations([

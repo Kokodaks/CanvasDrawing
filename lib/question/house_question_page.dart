@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../pages/Tree_IntroPage.dart';
+import '../config/env_config.dart';
 
 class HouseQuestionPage extends StatefulWidget {
   final int testId;
@@ -41,10 +42,14 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
   }
 
   Future<void> _checkQnADocumentExists() async {
-    final uri = Uri.http('3.37.122.29:3000', '/test/getQnAByTestId', {
-      'testId': widget.testId.toString(),
-      'drawingType': 'tree',
-    });
+    final baseUri = Uri.parse(EnvConfig.baseUrl);
+    final uri = baseUri.replace(
+      path: '/test/getQnAByTestId',
+      queryParameters: {
+        'testId': widget.testId.toString(),
+        'drawingType': 'house',
+      },
+    );
 
     try {
       final response = await http.get(uri);
@@ -126,7 +131,7 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
         break;
       }
 
-      final uri = Uri.http('3.37.122.29:3000', '/test/addQnA');
+      final uri = Uri.parse('${EnvConfig.baseUrl}/test/addQnA');
 
       try {
         final response = await http.post(

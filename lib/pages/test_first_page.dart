@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../pages/PrivacyConsentPage.dart';
+import '../config/env_config.dart';
 
 class TestFirstPage extends StatefulWidget {
   @override
@@ -30,8 +31,9 @@ class _TestFirstPageState extends State<TestFirstPage> {
     }
 
     try {
+      final baseUrl = EnvConfig.baseUrl.replaceFirst('http://', '');
       final uri = Uri.http(
-        '3.37.122.29:3000',
+        baseUrl,
         '/test/getTestBySsn',
         {'name': name, 'ssn': rrn},
       );

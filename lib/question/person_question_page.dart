@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import '../config/env_config.dart';
 
 class PersonQuestionPage extends StatefulWidget {
   final bool isMan;
@@ -55,14 +56,49 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
     super.initState();
     _speech = stt.SpeechToText();
     _initializeSpeechRecognition();
+    _checkQnADocumentExists();
     questions = widget.isMan ? _manQuestions : _womanQuestions;
+  }
+  Future<void> _checkQnADocumentExists() async {
+    final baseUri = Uri.parse(EnvConfig.baseUrl);
+    final uri = baseUri.replace(
+      path: '/test/getQnAByTestId',
+      queryParameters: {
+        'testId': widget.testId.toString(),
+        'drawingType': 'house',
+      },
+    );
+
+    try {
+      final response = await http.get(uri);
+      if (response.statusCode == 200 && response.body == 'null') {
+        await showDialog(
+          context: context,
+          builder: (context) =>
+              AlertDialog(
+                title: const Text("문서 없음"),
+                content: const Text(
+                    "해당 검사에 대한 QnA 문서가 존재하지 않습니다.\n상담사에게 문의해주세요."),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("확인"),
+                  ),
+                ],
+              ),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      print("❌ QnA 문서 확인 중 오류 발생: $e");
+    }
   }
 
   Future<void> _submitAnswers() async {
     final drawingType = widget.isMan ? "man" : "woman";
 
     for (int i = 0; i < questions.length; i++) {
-      final uri = Uri.http('3.37.122.29:3000', '/test/addQnA');
+      final uri = Uri.parse('${EnvConfig.baseUrl}/test/addQnA');
 
       try {
         final response = await http.post(

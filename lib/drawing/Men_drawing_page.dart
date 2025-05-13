@@ -9,6 +9,7 @@ import 'package:collection/collection.dart';
 import '../drawing/stroke_point.dart';
 import '../drawing/stroke_data.dart';
 import '../services/api_service.dart';
+import '../config/env_config.dart';
 
 // ─── Recorder Bridge ─────────────────────────────────────────
 class RecorderBridge {
@@ -289,7 +290,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
       if (_uploadInProgress) return;
       _uploadInProgress = true;
 
-      final uri = Uri.parse('http://3.37.122.29:3000/video/upload');
+      final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
       final req = http.MultipartRequest('POST', uri)
         ..fields['testId'] = widget.testId.toString()
         ..fields['name']   = 'men_drawing_recording';
