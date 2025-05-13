@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:path_provider/path_provider.dart';
 import '../pages/Tree_IntroPage.dart';
 
 class HouseQuestionPage extends StatefulWidget {
@@ -42,7 +41,7 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
   }
 
   Future<void> _checkQnADocumentExists() async {
-    final uri = Uri.http('192.168.0.23:3000', '/test/getQnAByTestId', {
+    final uri = Uri.http('3.37.122.29:3000', '/test/getQnAByTestId', {
       'testId': widget.testId.toString(),
       'drawingType': 'tree',
     });
@@ -127,7 +126,7 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
         break;
       }
 
-      final uri = Uri.http('192.168.0.23:3000', '/test/addQnA');
+      final uri = Uri.http('3.37.122.29:3000', '/test/addQnA');
 
       try {
         final response = await http.post(
@@ -190,7 +189,9 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
   }
 
   Future<File?> _getLatestScreenshot() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = Platform.isAndroid
+        ? Directory('/storage/emulated/0/Download')
+        : Directory('/tmp');
     final files = Directory(dir.path)
         .listSync()
         .whereType<File>()

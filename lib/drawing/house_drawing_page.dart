@@ -6,7 +6,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
 import '../question/house_question_page.dart';
@@ -173,9 +172,10 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       ByteData? byteData = await image.toByteData(format: ImageByteFormat.png);
       Uint8List pngBytes = byteData!.buffer.asUint8List();
 
-      final dir = Platform.isIOS
-          ? await getApplicationDocumentsDirectory()
-          : Directory('/storage/emulated/0/Download');
+      final dir = Platform.isAndroid
+          ? Directory('/storage/emulated/0/Download')
+          : Directory('/tmp');
+
       final path = '${dir.path}/house_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File(path);
       await file.writeAsBytes(pngBytes);
@@ -289,7 +289,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     if (_uploadInProgress) return;
     _uploadInProgress = true;
 
-    final uri = Uri.parse('http://192.168.0.23:3000/video/upload');
+    final uri = Uri.parse('http://3.37.122.29:3000/video/upload');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
       ..fields['name']   = 'house_drawing_recording';

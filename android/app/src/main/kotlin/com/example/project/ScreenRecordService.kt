@@ -1,4 +1,4 @@
-package com.example.project
+package com.example.canvasdrawing
 
 import android.app.*
 import android.content.Context

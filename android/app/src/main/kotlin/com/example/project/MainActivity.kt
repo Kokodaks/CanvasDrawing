@@ -1,10 +1,7 @@
-package com.example.project
+package com.example.canvasdrawing
 
 import android.app.Activity
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.content.*
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
@@ -23,17 +20,20 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // MethodChannel 초기화
         methodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-
         projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
         methodChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startRecording" -> {
                     val captureIntent = projectionManager?.createScreenCaptureIntent()
-                    startActivityForResult(captureIntent, REQUEST_CODE)
-                    result.success(null)
+                    if (captureIntent != null) {
+                        startActivityForResult(captureIntent, REQUEST_CODE)
+                        result.success(null)
+                    } else {
+                        Log.e("MainActivity", "❌ Failed to create capture intent")
+                        result.error("NO_INTENT", "Failed to create screen capture intent", null)
+                    }
                 }
                 "stopRecording" -> {
                     stopService(Intent(this, ScreenRecordService::class.java))
@@ -47,10 +47,9 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // BroadcastReceiver 등록
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action == "com.example.project.RECORDING_COMPLETE") {
+                if (intent?.action == "com.example.canvasdrawing.RECORDING_COMPLETE") {
                     val path = intent.getStringExtra("filePath")
                     Log.d("MainActivity", "📹 영상 녹화 완료 path: $path")
                     if (::methodChannel.isInitialized) {
@@ -62,9 +61,9 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        val filter = IntentFilter("com.example.project.RECORDING_COMPLETE")
+        val filter = IntentFilter("com.example.canvasdrawing.RECORDING_COMPLETE")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(receiver, filter, RECEIVER_EXPORTED)
+            registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
         } else {
             registerReceiver(receiver, filter)
         }
