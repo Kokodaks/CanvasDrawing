@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import '../config/env_config.dart';
 
 class FinishPage extends StatelessWidget {
   final int testId;
@@ -10,7 +11,7 @@ class FinishPage extends StatelessWidget {
 
   Future<void> _markAsCompletedAndExit(BuildContext context) async {
     try {
-      final uri = Uri.http('3.37.122.29:3000', '/test/markTestAsCompleted');
+      final uri = Uri.parse('${EnvConfig.baseUrl}/test/markTestAsCompleted');
 
       final response = await http.post(
         uri,
