@@ -106,7 +106,7 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
   }
 
   Future<void> _submitAnswers() async {
-    const drawingType = "tree";
+    const drawingType = "house";
     final testId = widget.testId;
     bool allSuccess = true;
 
@@ -144,7 +144,8 @@ class _HouseQuestionPageState extends State<HouseQuestionPage> {
             'answer': answer,
           }),
         );
-
+        print('📤 질문 ${i + 1} 응답 코드: ${response.statusCode}');
+        print('📦 응답 내용: ${response.body}');
         if (response.statusCode != 200) {
           allSuccess = false;
           break;
