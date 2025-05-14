@@ -288,7 +288,7 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
     final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
-      ..fields['name']   = 'tree_drawing_recording';
+      ..fields['type']   = 'tree';
 
     try {
       req.files.add(await http.MultipartFile.fromPath('video', path));

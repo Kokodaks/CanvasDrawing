@@ -27,8 +27,10 @@ class ApiService {
         body: jsonEncode(body),
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         print('[✅] QnA 생성 성공: ${response.body}');
+      } else if (response.body.contains('QnA already exists')) {
+        print('[ℹ️] 이미 QnA가 존재하여 생성을 건너뜁니다.');
       } else {
         print('[❌] QnA 생성 실패: ${response.statusCode}, ${response.body}');
       }
@@ -36,6 +38,7 @@ class ApiService {
       print('[❌] QnA 요청 예외 발생: $e');
     }
   }
+
 
 
 // ⛔️ 현재 디바운싱 기능 삭제로 인해 사용되지 않음

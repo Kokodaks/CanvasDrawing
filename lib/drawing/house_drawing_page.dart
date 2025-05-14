@@ -290,7 +290,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
-      ..fields['name']   = 'house_drawing_recording';
+      ..fields['type']   = 'house';
 
     try {
       req.files.add(await http.MultipartFile.fromPath('video', path));

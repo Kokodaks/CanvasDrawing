@@ -4,19 +4,39 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../config/env_config.dart';
 
-class FinishPage extends StatelessWidget {
+class FinishPage extends StatefulWidget {
   final int testId;
 
   const FinishPage({Key? key, required this.testId}) : super(key: key);
 
-  Future<void> _markAsCompletedAndExit(BuildContext context) async {
+  @override
+  _FinishPageState createState() => _FinishPageState();
+}
+
+class _FinishPageState extends State<FinishPage> {
+  bool _hasSent = false;  // 중복 전송 방지
+
+  @override
+  void initState() {
+    super.initState();
+    // 페이지에 진입하자마자 한 번만 API 호출
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_hasSent) {
+        _hasSent = true;
+        _markAsCompletedAndExit();
+      }
+    });
+  }
+
+  Future<void> _markAsCompletedAndExit() async {
     try {
-      final uri = Uri.parse('${EnvConfig.baseUrl}/test/markTestAsCompleted');
+
+      final uri = Uri.parse('${EnvConfig.baseUrl}/test/complete');
 
       final response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'testid': testId}),
+        body: jsonEncode({'testid': widget.testId}),
       );
 
       if (response.statusCode == 200) {
@@ -27,12 +47,15 @@ class FinishPage extends StatelessWidget {
     } catch (e) {
       debugPrint("❌ 예외 발생: $e");
     } finally {
-      SystemNavigator.pop(); // 전송이 끝났든 아니든 종료
+      // 전송 여부 상관없이 앱 종료
+      SystemNavigator.pop();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Android일 때만 버튼을 보여주되, 이미 initState에서 한 번 전송했으니
+    // 백업용으로 남겨둡니다.
     final isAndroid = Theme.of(context).platform == TargetPlatform.android;
 
     return Scaffold(
@@ -46,7 +69,7 @@ class FinishPage extends StatelessWidget {
             ),
           ),
 
-          // 하단 버튼 (Android만 표시)
+          // 수동 전송 버튼 (Android만 표시)
           if (isAndroid)
             Positioned(
               bottom: 40,
@@ -55,7 +78,7 @@ class FinishPage extends StatelessWidget {
               child: SizedBox(
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: () => _markAsCompletedAndExit(context),
+                  onPressed: _markAsCompletedAndExit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,
                     shape: RoundedRectangleBorder(

@@ -143,7 +143,8 @@ class _TreeQuestionPageState extends State<TreeQuestionPage> {
             'answer': answer,
           }),
         );
-
+        print('📤 질문 ${i + 1} 응답 코드: ${response.statusCode}');
+        print('📦 응답 내용: ${response.body}');
         if (response.statusCode != 200) {
           allSuccess = false;
           break;

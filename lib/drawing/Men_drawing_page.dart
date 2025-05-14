@@ -293,7 +293,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
       final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
       final req = http.MultipartRequest('POST', uri)
         ..fields['testId'] = widget.testId.toString()
-        ..fields['name']   = 'men_drawing_recording';
+        ..fields['type']   = 'man';
 
       try {
         req.files.add(await http.MultipartFile.fromPath('video', path));
@@ -451,7 +451,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
                     childId: widget.childId,
                     drawingType: "man",
                   );
-
+                  widget.onDrawingComplete();
               },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,

@@ -293,7 +293,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
     final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
-      ..fields['name']   = 'women_drawing_recording';
+      ..fields['type']   = 'woman';
 
     try {
       req.files.add(await http.MultipartFile.fromPath('video', path));
@@ -337,7 +337,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Image.asset('assets/남자를.png', width: 60),
+                    Image.asset('assets/여자를.png', width: 60),
                     const SizedBox(height: 4),
                     Image.asset('assets/그려봐!.png', width: 80),
                   ],
@@ -445,13 +445,14 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
                     widget.childId,
                     "woman"
                 );
+
                 // ✅ createQnA 호출
                 await ApiService.createQnA(
                   testId: widget.testId,
                   childId: widget.childId,
                   drawingType: "woman",
                 );
-
+                widget.onDrawingComplete();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,

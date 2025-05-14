@@ -112,10 +112,10 @@ class _PersonQuestionPageState extends State<PersonQuestionPage> {
           }),
         );
 
-        debugPrint('📤 질문 ${i + 1} 전송 상태: ${response.statusCode}');
-        debugPrint('📦 응답 내용: ${response.body}');
+        print('📤 질문 ${i + 1} 응답 코드: ${response.statusCode}');
+        print('📦 응답 내용: ${response.body}');
       } catch (e) {
-        debugPrint('🛑 질문 ${i + 1} 전송 중 예외 발생: $e');
+        print('🛑 질문 ${i + 1} 전송 중 예외 발생: $e');
       }
     }
   }
