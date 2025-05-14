@@ -19,16 +19,18 @@ class _TestFirstPageState extends State<TestFirstPage> {
     print('✅ [submitInfo] 함수 호출됨');
 
     final name = nameController.text.trim();
-    final rrn = _rrnRaw.trim();
-    print('📨 입력 받은 name: $name / rrn: $rrn');
+    final digits = _rrnRaw.trim();
 
-    if (name.isEmpty || rrn.length != 13) {
+    if (name.isEmpty || digits.length != 13) {
       print('⚠️ 입력값 부족: name 또는 주민번호가 비어 있음');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("이름과 주민등록번호(13자리)를 입력해주세요.")),
       );
       return;
     }
+
+    final rrn = '${digits.substring(0, 6)}-${digits.substring(6)}';
+    print('📨 입력 받은 name: $name / rrn: $rrn');
 
     try {
       final baseUrl = EnvConfig.baseUrl.replaceFirst('http://', '');

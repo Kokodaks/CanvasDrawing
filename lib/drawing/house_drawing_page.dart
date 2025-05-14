@@ -441,6 +441,13 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
                     widget.childId,
                     "house"
                 );
+
+                // ✅ createQnA 호출
+                await ApiService.createQnA(
+                  testId: widget.testId,
+                  childId: widget.childId,
+                  drawingType: "house",
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(

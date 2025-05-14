@@ -7,6 +7,37 @@ import 'package:http_parser/http_parser.dart';
 class ApiService {
   static final _baseUrl = dotenv.env['IP_ADDR'];
 
+  static Future<void> createQnA({
+    required int testId,
+    required int childId,
+    required String drawingType,
+  }) async {
+    final url = Uri.parse('$_baseUrl/test/createQnA');
+
+    final Map<String, dynamic> body = {
+      "testId": testId,
+      "childId": childId,
+      "drawingType": drawingType,
+    };
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        print('[✅] QnA 생성 성공: ${response.body}');
+      } else {
+        print('[❌] QnA 생성 실패: ${response.statusCode}, ${response.body}');
+      }
+    } catch (e) {
+      print('[❌] QnA 요청 예외 발생: $e');
+    }
+  }
+
+
 // ⛔️ 현재 디바운싱 기능 삭제로 인해 사용되지 않음
 /*
   static Future<void> sendToOpenAi(Uint8List duringPng, List<Map<String, dynamic>> allJsonData, int testId, int childId, String type)async{
@@ -126,3 +157,4 @@ class ApiService {
     }
   }
 }
+

@@ -439,6 +439,12 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
                     widget.childId,
                     "tree"
                 );
+                // ✅ createQnA 호출
+                await ApiService.createQnA(
+                testId: widget.testId,
+                childId: widget.childId,
+                drawingType: "tree",
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(

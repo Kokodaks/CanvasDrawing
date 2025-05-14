@@ -443,7 +443,13 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
                       finalJson,
                       widget.testId,
                       widget.childId,
-                      "men"
+                      "man"
+                  );
+                  // ✅ createQnA 호출
+                  await ApiService.createQnA(
+                    testId: widget.testId,
+                    childId: widget.childId,
+                    drawingType: "man",
                   );
 
               },
