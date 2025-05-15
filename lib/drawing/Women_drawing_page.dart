@@ -10,6 +10,7 @@ import '../drawing/stroke_point.dart';
 import '../drawing/stroke_data.dart';
 import '../services/api_service.dart';
 import '../config/env_config.dart';
+import 'package:http_parser/http_parser.dart';
 
 // ─── Recorder Bridge ─────────────────────────────────────────
 class RecorderBridge {
@@ -72,7 +73,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
   void initState() {
     super.initState();
     _videoDone = Completer<void>();
-    _startRecording(); // ✅ 자동 녹화 시작
+    _startRecording();
 
     const MethodChannel('native_recorder').setMethodCallHandler((call) async {
       if (call.method != 'onRecordingComplete') return;
@@ -81,6 +82,10 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
 
       final path = call.arguments as String;
       print('[REC] onRecordingComplete path=$path');
+
+      // ✏️ 추가: 파일 쓰기/flush 여유 주기
+      await Future.delayed(const Duration(milliseconds: 300));
+
       await uploadVideo(path);
       if (!_videoDone.isCompleted) _videoDone.complete();
       if (mounted) setState(() => isRecording = false);
@@ -175,7 +180,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
           ? Directory('/storage/emulated/0/Download')
           : Directory('/tmp');
 
-      final path = '${dir.path}/women_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final path = '${dir.path}/woman_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File(path);
       await file.writeAsBytes(pngBytes);
 
@@ -286,26 +291,52 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
 
 
   // ─── 영상 업로드 ───────────────────────────────────────────
-  Future<void> uploadVideo(String path) async {
+  Future<void> uploadVideo(String rawPath) async {
     if (_uploadInProgress) return;
     _uploadInProgress = true;
 
-    final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload?testId=${widget.testId}&type=woman');
+    final cleanPath = rawPath.replaceFirst('file://', '');
+    final file = File(cleanPath);
+
+    // ✏️ 길이 체크 + 재시도
+    int length = 0;
+    for (int attempt = 0; attempt < 5; attempt++) {
+      if (await file.exists()) {
+        length = await file.length();
+        if (length > 0) break;
+      }
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+    print('[UPLOAD] path=$cleanPath, final length=$length');
+
+    if (length == 0) {
+      print('[UPLOAD] ⚠️ 파일이 여전히 비어 있어 업로드를 건너뜁니다.');
+      _uploadInProgress = false;
+      return;
+    }
+
+    final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
-      ..fields['type']   = 'woman';
-
+      ..fields['type']   = 'woman'
+      ..files.add(
+        await http.MultipartFile.fromPath(
+          'video',
+          cleanPath,
+          contentType: MediaType('video', 'quicktime'),
+        ),
+      );
     try {
-      req.files.add(await http.MultipartFile.fromPath('video', path));
-      final res  = await req.send();
+      final res = await req.send();
       final body = await res.stream.bytesToString();
-      print('[API] 상태코드=${res.statusCode} body=$body');
+      print('[UPLOAD] 상태코드=${res.statusCode}, body=$body');
     } catch (e) {
-      print('[API] 업로드 예외: $e');
+      print('[UPLOAD] 업로드 예외: $e');
     } finally {
       _uploadInProgress = false;
     }
   }
+
 
   // ─── UI(Build) ────────────────────────────────────────────
   @override
@@ -432,7 +463,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
                 final pngFinal = await _takeScreenshotDirectly();
                 final finalJsonOpenAi = finalDrawingDataOnly.map((e) => e.toJsonOpenAi(widget.testId)).toList();
                 if(pngFinal != null){
-                  ApiService.sendFinalToOpenAi(pngFinal, finalJsonOpenAi, widget.testId, widget.childId, "women");
+                  ApiService.sendFinalToOpenAi(pngFinal, finalJsonOpenAi, widget.testId, widget.childId, "woman");
                 }
 
                 final allJson = data.map((e) => e.toJson(widget.testId)).toList();
@@ -445,7 +476,6 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
                     widget.childId,
                     "woman"
                 );
-
                 // ✅ createQnA 호출
                 await ApiService.createQnA(
                   testId: widget.testId,

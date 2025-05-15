@@ -10,6 +10,7 @@ import '../drawing/stroke_point.dart';
 import '../drawing/stroke_data.dart';
 import '../services/api_service.dart';
 import '../config/env_config.dart';
+import 'package:http_parser/http_parser.dart';
 
 // ─── Recorder Bridge ─────────────────────────────────────────
 class RecorderBridge {
@@ -72,7 +73,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
   void initState() {
     super.initState();
     _videoDone = Completer<void>();
-    _startRecording(); // ✅ 자동 녹화 시작
+    _startRecording();
 
     const MethodChannel('native_recorder').setMethodCallHandler((call) async {
       if (call.method != 'onRecordingComplete') return;
@@ -81,6 +82,10 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
 
       final path = call.arguments as String;
       print('[REC] onRecordingComplete path=$path');
+
+      // ✏️ 추가: 파일 쓰기/flush 여유 주기
+      await Future.delayed(const Duration(milliseconds: 300));
+
       await uploadVideo(path);
       if (!_videoDone.isCompleted) _videoDone.complete();
       if (mounted) setState(() => isRecording = false);
@@ -175,7 +180,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
           ? Directory('/storage/emulated/0/Download')
           : Directory('/tmp');
 
-      final path = '${dir.path}/men_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
+      final path = '${dir.path}/man_drawing_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File(path);
       await file.writeAsBytes(pngBytes);
 
@@ -286,140 +291,166 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
 
 
   // ─── 영상 업로드 ───────────────────────────────────────────
-  Future<void> uploadVideo(String path) async {
+  Future<void> uploadVideo(String rawPath) async {
     if (_uploadInProgress) return;
     _uploadInProgress = true;
 
-    final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload?testId=${widget.testId}&type=man');
+    final cleanPath = rawPath.replaceFirst('file://', '');
+    final file = File(cleanPath);
+
+    // ✏️ 길이 체크 + 재시도
+    int length = 0;
+    for (int attempt = 0; attempt < 5; attempt++) {
+      if (await file.exists()) {
+        length = await file.length();
+        if (length > 0) break;
+      }
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
+    print('[UPLOAD] path=$cleanPath, final length=$length');
+
+    if (length == 0) {
+      print('[UPLOAD] ⚠️ 파일이 여전히 비어 있어 업로드를 건너뜁니다.');
+      _uploadInProgress = false;
+      return;
+    }
+
+    final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
-      ..fields['type']   = 'man';
-
+      ..fields['type']   = 'man'
+      ..files.add(
+        await http.MultipartFile.fromPath(
+          'video',
+          cleanPath,
+          contentType: MediaType('video', 'quicktime'),
+        ),
+      );
     try {
-      req.files.add(await http.MultipartFile.fromPath('video', path));
-      final res  = await req.send();
+      final res = await req.send();
       final body = await res.stream.bytesToString();
-      print('[API] 상태코드=${res.statusCode} body=$body');
+      print('[UPLOAD] 상태코드=${res.statusCode}, body=$body');
     } catch (e) {
-      print('[API] 업로드 예외: $e');
+      print('[UPLOAD] 업로드 예외: $e');
     } finally {
       _uploadInProgress = false;
     }
   }
 
-    // ─── UI(Build) ────────────────────────────────────────────
-    @override
-    Widget build(BuildContext context) {
-      final sw = MediaQuery
-          .of(context)
-          .size
-          .width;
-      final canvasW = sw * 0.8; // 기존 0.65보다 더 크게 확장
-      final canvasH = canvasW * (297 / 210); // 비율은 유지 (A4 비율)
 
-      return Scaffold(
-        body: Stack(
-          children: [
-            // ─── 배경 이미지 ───
-            Positioned.fill(
-              child: Image.asset('assets/exercise.png', fit: BoxFit.cover),
-            ),
+  // ─── UI(Build) ────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    final sw = MediaQuery
+        .of(context)
+        .size
+        .width;
+    final canvasW = sw * 0.8; // 기존 0.65보다 더 크게 확장
+    final canvasH = canvasW * (297 / 210); // 비율은 유지 (A4 비율)
 
-            // ✅ 그림판 위쪽에 이미지 배치
-            Positioned(
-              top: 70,
-              left: 45,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Image.asset('assets/house_tree.png', width: 80, height: 80),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Image.asset('assets/남자를.png', width: 60),
-                      const SizedBox(height: 4),
-                      Image.asset('assets/그려봐!.png', width: 80),
-                    ],
-                  ),
-                ],
-              ),
+    return Scaffold(
+      body: Stack(
+        children: [
+          // ─── 배경 이미지 ───
+          Positioned.fill(
+            child: Image.asset('assets/exercise.png', fit: BoxFit.cover),
+          ),
+
+          // ✅ 그림판 위쪽에 이미지 배치
+          Positioned(
+            top: 70,
+            left: 45,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Image.asset('assets/house_tree.png', width: 80, height: 80),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Image.asset('assets/남자를.png', width: 60),
+                    const SizedBox(height: 4),
+                    Image.asset('assets/그려봐!.png', width: 80),
+                  ],
+                ),
+              ],
             ),
+          ),
 
             // ─── 그림판 (RepaintBoundary) ───
-            Center(
-              child: RepaintBoundary(
-                key: _repaintKey,
-                child: Listener(
-                  onPointerDown: (e) {
-                    strokeStartTime = DateTime
-                        .now()
-                        .millisecondsSinceEpoch;
-                    isErasing
-                        ? eraseStrokeAt(e.position)
-                        : setState(() =>
-                        startNewStroke(e.position, 0, e.pressure));
-                  },
-                  onPointerMove: (PointerMoveEvent event) {
-                    final position = event.position;
-                    final currentTime = DateTime.now().millisecondsSinceEpoch;
-                    final t = currentTime - strokeStartTime;
+          Center(
+            child: RepaintBoundary(
+              key: _repaintKey,
+              child: Listener(
+                onPointerDown: (e) {
+                  strokeStartTime = DateTime
+                      .now()
+                      .millisecondsSinceEpoch;
+                  isErasing
+                      ? eraseStrokeAt(e.position)
+                      : setState(() =>
+                      startNewStroke(e.position, 0, e.pressure));
+                },
+                onPointerMove: (PointerMoveEvent event) {
+                  final position = event.position;
+                  final currentTime = DateTime.now().millisecondsSinceEpoch;
+                  final t = currentTime - strokeStartTime;
 
-                    if (!isErasing) {
-                      setState(() => addPointToStroke(position, t, event.pressure));
-                    }
-                  },
-                  onPointerUp: (_) {
-                    if (!isErasing) {
-                      setState(() => endStroke());
-                    }
-                  },
-                  child: Container(
-                    key: _canvasKey,
-                    width: canvasW,
-                    height: canvasH,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.orange, width: 3),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
-                      child: CustomPaint(
-                        painter: StrokePainter(strokes, currentStroke),
-                      ),
+                  if (!isErasing) {
+                    setState(() => addPointToStroke(position, t, event.pressure));
+                  }
+                },
+                onPointerUp: (_) {
+                  if (!isErasing) {
+                    setState(() => endStroke());
+                  }
+                },
+                child: Container(
+                  key: _canvasKey,
+                  width: canvasW,
+                  height: canvasH,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.orange, width: 3),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: CustomPaint(
+                      painter: StrokePainter(strokes, currentStroke),
                     ),
                   ),
                 ),
               ),
             ),
+          ),
 
-            // ─── 도구 버튼 ───
-            Positioned(
-              right: 32,
-              top: MediaQuery
-                  .of(context)
-                  .size
-                  .height / 2 - 80,
-              child: Column(
-                children: [
-                  _toolButton('assets/pencil.png', () {
-                    setState(() {
-                      isErasing = false;
-                      selectedColor = Colors.black;
-                      _modeJustChanged = true;
-                    });
-                  }, !isErasing),
-                  const SizedBox(height: 24),
-                  _toolButton('assets/eraser.png', () {
-                    setState(() {
-                      isErasing = true;
-                      _modeJustChanged = true;
-                    });
-                  }, isErasing),
-                ],
-              ),
+          // ─── 도구 버튼 ───
+          Positioned(
+            right: 32,
+            top: MediaQuery
+                .of(context)
+                .size
+                .height / 2 - 80,
+            child: Column(
+              children: [
+                _toolButton('assets/pencil.png', () {
+                  setState(() {
+                    isErasing = false;
+                    selectedColor = Colors.black;
+                    _modeJustChanged = true;
+                  });
+                }, !isErasing),
+                const SizedBox(height: 24),
+                _toolButton('assets/eraser.png', () {
+                  setState(() {
+                    isErasing = true;
+                    _modeJustChanged = true;
+                  });
+                }, isErasing),
+              ],
             ),
+          ),
 
             // ─── 완료 버튼 ───
             Positioned(
@@ -432,7 +463,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
                   final pngFinal = await _takeScreenshotDirectly();
                   final finalJsonOpenAi = finalDrawingDataOnly.map((e) => e.toJsonOpenAi(widget.testId)).toList();
                   if(pngFinal != null){
-                    ApiService.sendFinalToOpenAi(pngFinal, finalJsonOpenAi, widget.testId, widget.childId, "men");
+                    ApiService.sendFinalToOpenAi(pngFinal, finalJsonOpenAi, widget.testId, widget.childId, "man");
                   }
 
                   final allJson = data.map((e) => e.toJson(widget.testId)).toList();

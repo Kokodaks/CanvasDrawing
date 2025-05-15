@@ -72,11 +72,17 @@ class MainActivity : FlutterActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
+        Log.d("MainActivity", "📥 onActivityResult() 진입함")
+        Log.d("MainActivity", "📦 requestCode=$requestCode, resultCode=$resultCode, data=$data")
+
         if (requestCode == REQUEST_CODE && resultCode == Activity.RESULT_OK && data != null) {
+            Log.d("MainActivity", "✅ 조건 통과 → ScreenRecordService 시작")
             val serviceIntent = Intent(this, ScreenRecordService::class.java)
             serviceIntent.putExtra("resultCode", resultCode)
             serviceIntent.putExtra("data", data)
             startForegroundService(serviceIntent)
+        } else {
+            Log.e("MainActivity", "❌ 조건 불만족 → 서비스 실행 안 함")
         }
     }
 }
