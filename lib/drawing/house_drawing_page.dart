@@ -287,7 +287,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
     if (_uploadInProgress) return;
     _uploadInProgress = true;
 
-    final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
+    final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload?testId=${widget.testId}&type=house');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
       ..fields['type']   = 'house';

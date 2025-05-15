@@ -290,7 +290,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
     if (_uploadInProgress) return;
     _uploadInProgress = true;
 
-    final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
+    final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload?testId=${widget.testId}&type=woman');
     final req = http.MultipartRequest('POST', uri)
       ..fields['testId'] = widget.testId.toString()
       ..fields['type']   = 'woman';

@@ -285,27 +285,27 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
     }
 
 
-    // ─── 영상 업로드 ───────────────────────────────────────────
-    Future<void> uploadVideo(String path) async {
-      if (_uploadInProgress) return;
-      _uploadInProgress = true;
+  // ─── 영상 업로드 ───────────────────────────────────────────
+  Future<void> uploadVideo(String path) async {
+    if (_uploadInProgress) return;
+    _uploadInProgress = true;
 
-      final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload');
-      final req = http.MultipartRequest('POST', uri)
-        ..fields['testId'] = widget.testId.toString()
-        ..fields['type']   = 'man';
+    final uri = Uri.parse('${EnvConfig.baseUrl}/video/upload?testId=${widget.testId}&type=man');
+    final req = http.MultipartRequest('POST', uri)
+      ..fields['testId'] = widget.testId.toString()
+      ..fields['type']   = 'man';
 
-      try {
-        req.files.add(await http.MultipartFile.fromPath('video', path));
-        final res  = await req.send();
-        final body = await res.stream.bytesToString();
-        print('[API] 상태코드=${res.statusCode} body=$body');
-      } catch (e) {
-        print('[API] 업로드 예외: $e');
-      } finally {
-        _uploadInProgress = false;
-      }
+    try {
+      req.files.add(await http.MultipartFile.fromPath('video', path));
+      final res  = await req.send();
+      final body = await res.stream.bytesToString();
+      print('[API] 상태코드=${res.statusCode} body=$body');
+    } catch (e) {
+      print('[API] 업로드 예외: $e');
+    } finally {
+      _uploadInProgress = false;
     }
+  }
 
     // ─── UI(Build) ────────────────────────────────────────────
     @override
