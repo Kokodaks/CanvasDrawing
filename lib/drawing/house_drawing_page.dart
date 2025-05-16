@@ -169,6 +169,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
       strokes.add(currentStroke);
       currentStroke = [];
+      print("🖌️ 현재 strokeOrder: $strokeOrder");
       strokeOrder++;
     }
   }
