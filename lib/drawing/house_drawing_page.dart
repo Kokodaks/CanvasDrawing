@@ -46,6 +46,8 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   List<StrokeData> data = [];
   List<StrokeData> finalDrawingDataOnly = [];
 
+
+  int    globalStartTime = 0;
   int    strokeStartTime = 0;
   int    strokeOrder     = 0;
   double eraserSize = 10.0;
@@ -67,11 +69,13 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
   late Completer<void> _videoDone;
 
   @override
+  @override
   void initState() {
     super.initState();
-    _videoDone = Completer<void>();
-    _startRecording();
 
+    _videoDone = Completer<void>();
+
+    globalStartTime = DateTime.now().millisecondsSinceEpoch;
     const MethodChannel('native_recorder').setMethodCallHandler((call) async {
       if (call.method != 'onRecordingComplete') return;
       if (_onCompleteHandled) return;
@@ -80,23 +84,26 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
       final path = call.arguments as String;
       print('[REC] onRecordingComplete path=$path');
 
-      // ✏️ 추가: 파일 쓰기/flush 여유 주기
       await Future.delayed(const Duration(milliseconds: 300));
 
       await uploadVideo(path);
-      if (!_videoDone.isCompleted) _videoDone.complete();
+      if (!_videoDone.isCompleted) _videoDone.complete(); // ✅ 반드시 호출되게
       if (mounted) setState(() => isRecording = false);
       _recordingInProgress = false;
     });
+
+    // 📍 setMethodCallHandler 먼저 등록하고 startRecording 호출
+    _startRecording();
   }
 
   Future<void> _startRecording() async {
     if (_recordingInProgress) return;
-    _recordingInProgress     = true;
-    _onCompleteHandled       = false;  // ← 녹화 시작할 때마다 “한 번만” 리셋
+
+    _recordingInProgress = true;
+    _onCompleteHandled = false;
+    _videoDone = Completer<void>(); // ✅ startRecording 직전에 반드시 초기화
 
     print('[REC] startRecording() 호출');
-    _videoDone = Completer<void>();
     try {
       await RecorderBridge.startRecording();
       if (mounted) setState(() => isRecording = true);
@@ -162,6 +169,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
 
       strokes.add(currentStroke);
       currentStroke = [];
+      strokeOrder++;
     }
   }
 
@@ -384,18 +392,18 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
               key: _repaintKey,
               child: Listener(
                 onPointerDown: (e) {
-                  strokeStartTime = DateTime
-                      .now()
-                      .millisecondsSinceEpoch;
+                  final currentTime = DateTime.now().millisecondsSinceEpoch;
+                  strokeStartTime = currentTime-globalStartTime;
+
                   isErasing
                       ? eraseStrokeAt(e.position)
                       : setState(() =>
-                      startNewStroke(e.position, 0, e.pressure));
+                      startNewStroke(e.position, strokeStartTime, e.pressure));
                 },
                 onPointerMove: (PointerMoveEvent event) {
                   final position = event.position;
                   final currentTime = DateTime.now().millisecondsSinceEpoch;
-                  final t = currentTime - strokeStartTime;
+                  final t = currentTime - globalStartTime;
 
                   if (!isErasing) {
                     setState(() => addPointToStroke(position, t, event.pressure));
@@ -460,6 +468,7 @@ class _HouseDrawingPageState extends State<HouseDrawingPage> {
             child: ElevatedButton(
               onPressed: () async {
                 await _stopRecordingSafely();
+                await _videoDone.future;
                 final pngFinal = await _takeScreenshotDirectly();
                 final finalJsonOpenAi = finalDrawingDataOnly.map((e) => e.toJsonOpenAi(widget.testId)).toList();
                 if(pngFinal != null){

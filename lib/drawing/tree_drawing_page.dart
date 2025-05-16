@@ -162,6 +162,7 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
 
       strokes.add(currentStroke);
       currentStroke = [];
+      strokeOrder++;
     }
   }
 

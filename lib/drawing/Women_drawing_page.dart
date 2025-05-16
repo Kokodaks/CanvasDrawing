@@ -165,6 +165,7 @@ class _WomenDrawingPageState extends State<WomenDrawingPage> {
 
       strokes.add(currentStroke);
       currentStroke = [];
+      strokeOrder++;
     }
   }
 

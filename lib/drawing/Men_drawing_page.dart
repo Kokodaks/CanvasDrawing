@@ -165,6 +165,7 @@ class _MenDrawingPageState extends State<MenDrawingPage> {
 
       strokes.add(currentStroke);
       currentStroke = [];
+      strokeOrder++;
     }
   }
 
