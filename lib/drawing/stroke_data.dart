@@ -21,25 +21,30 @@ class StrokeData {
     }
   }
 
-  Map<String, dynamic> toJson(int testId) => {
-    "testId" : testId,
-    "isErasing": isErasing,
+  Map<String, dynamic> toJson() => {
     "strokeOrder": strokeOrder,
     "strokeStartTime": strokeStartTime,
+    "isErasing": isErasing,
     "color": color.value.toRadixString(16),
     "points": points.map((p) => p.toJson()).toList(),
   };
 
-  Map<String, dynamic> toJsonOpenAi(int testId) =>{
-    "testId" : testId,
-    "isErasing": isErasing,
+  Map<String, dynamic> toJsonOpenAi() =>{
     "strokeOrder": strokeOrder,
     "strokeStartTime": strokeStartTime,
+    "isErasing": isErasing,
     "color": color.value.toRadixString(16),
-    "points": points.map((p) => {
-      "x": p.offset?.dx,
-      "y": p.offset?.dy
+    "points": _samplePoints(points, 10).map((p)=>{
+      "x":p.offset?.dx,
+      "y":p.offset?.dy
     }).toList(),
   };
+
+  List<StrokePoint> _samplePoints(List<StrokePoint> points, int interval){
+    return List.generate(
+        (points.length / interval).ceil(),
+        (i) => points[i * interval],
+    )..add(points.last);
+  }
 
 }

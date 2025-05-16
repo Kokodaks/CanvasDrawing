@@ -471,13 +471,13 @@ class _TreeDrawingPageState extends State<TreeDrawingPage> {
                 await _stopRecordingSafely();
                 await _videoDone.future;
                 final pngFinal = await _takeScreenshotDirectly();
-                final finalJsonOpenAi = finalDrawingDataOnly.map((e) => e.toJsonOpenAi(widget.testId)).toList();
+                final finalJsonOpenAi = finalDrawingDataOnly.map((e) => e.toJsonOpenAi()).toList();
                 if(pngFinal != null){
                   ApiService.sendFinalToOpenAi(pngFinal, finalJsonOpenAi, widget.testId, widget.childId, "tree");
                 }
 
-                final allJson = data.map((e) => e.toJson(widget.testId)).toList();
-                final finalJson = finalDrawingDataOnly.map((e) => e.toJson(widget.testId))
+                final allJson = data.map((e) => e.toJson()).toList();
+                final finalJson = finalDrawingDataOnly.map((e) => e.toJson())
                     .toList();
                 ApiService.sendStrokesWithMulter(
                     allJson,
