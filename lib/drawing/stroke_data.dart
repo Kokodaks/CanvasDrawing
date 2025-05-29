@@ -34,10 +34,14 @@ class StrokeData {
     "strokeStartTime": strokeStartTime,
     "isErasing": isErasing,
     "color": color.value.toRadixString(16),
-    "points": _samplePoints(points, 10).map((p)=>{
-      "x":p.offset?.dx,
-      "y":p.offset?.dy
+    "points": points.map((p) => {
+      "x": p.offset?.dx,
+      "y": p.offset?.dy
     }).toList(),
+    // "points": _samplePoints(points, 10).map((p)=>{
+    //   "x":p.offset?.dx,
+    //   "y":p.offset?.dy
+    // }).toList(),
   };
 
   List<StrokePoint> _samplePoints(List<StrokePoint> points, int interval){
